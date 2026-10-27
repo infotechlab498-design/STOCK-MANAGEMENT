@@ -1,0 +1,95 @@
+[
+  {
+    "id": "RET-MVR12GTI-99047e",
+    "returnNumber": "MRN-2026-0001",
+    "materialIssueId": "ISS-MVR12GS6-3aefaa",
+    "materialIssueNumber": "MIV-2026-0001",
+    "requisitionId": "REQ-TEST-P10",
+    "requisitionNumber": "REQ-2026-9999",
+    "projectId": "PRJ-101",
+    "projectName": "Metro Rail Viaduct Sector 4",
+    "warehouseId": "WH-02",
+    "warehouseName": "North Industrial Depot & Yard",
+    "returnDate": "2026-11-01",
+    "returnedByPerson": "Site Foreman Dave",
+    "reason": "Over-ordered batch for section 1 pour",
+    "status": "Posted",
+    "items": [
+      {
+        "id": "MRI-mvr12gti-0-17ea",
+        "materialReturnId": "RET-MVR12GTI-99047e",
+        "materialIssueItemId": "MII-mvr12gs6-0-288c",
+        "materialId": "MAT-001",
+        "materialCode": "CONC-40",
+        "materialName": "Ready-Mix Concrete Grade 40",
+        "unitCode": "CuM",
+        "issuedQuantity": 30,
+        "previouslyReturnedQuantity": 0,
+        "maxReturnableQuantity": 30,
+        "returnedQuantity": 10,
+        "condition": "ReusableGood",
+        "disposition": "ReturnToUsableStock",
+        "unitCost": 120,
+        "totalReturnAmount": 1200,
+        "inspectionNotes": "Verified usable stock quality",
+        "stockLedgerEntryId": "STK-TXN-MVR12GTQ-1f281c"
+      }
+    ],
+    "auditTrail": [
+      {
+        "id": "RA-ecf487a4",
+        "materialReturnId": "RET-MVR12GTI-99047e",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Material return note draft created against MIV-2026-0001. Reason: Over-ordered batch for section 1 pour",
+        "timestampUtc": "2026-10-27T18:37:24.006Z"
+      },
+      {
+        "id": "RA-55233dc7",
+        "materialReturnId": "RET-MVR12GTI-99047e",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Inspected",
+        "comments": "QA Storekeeper inspected slump and setting properties",
+        "timestampUtc": "2026-10-27T18:37:24.009Z"
+      },
+      {
+        "id": "RA-144f6828",
+        "materialReturnId": "RET-MVR12GTI-99047e",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved site return for restocking",
+        "timestampUtc": "2026-10-27T18:37:24.012Z"
+      },
+      {
+        "id": "RA-c13b5873",
+        "materialReturnId": "RET-MVR12GTI-99047e",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Posted",
+        "comments": "Material return posted to stock ledger. 1 reusable lines restored to inventory balances.",
+        "timestampUtc": "2026-10-27T18:37:24.014Z"
+      }
+    ],
+    "remarks": "Returned immediately to depot yard",
+    "createdByUserId": "USR-STR-04",
+    "createdByName": "Marcus Vance",
+    "createdAtUtc": "2026-10-27T18:37:24.006Z",
+    "inspectedByUserId": "USR-STR-04",
+    "inspectedByName": "Marcus Vance",
+    "inspectedAtUtc": "2026-10-27T18:37:24.009Z",
+    "updatedAtUtc": "2026-10-27T18:37:24.014Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T18:37:24.012Z",
+    "postedByUserId": "USR-STR-04",
+    "postedByName": "Marcus Vance",
+    "postedAtUtc": "2026-10-27T18:37:24.014Z"
+  }
+]

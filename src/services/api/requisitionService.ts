@@ -1,7 +1,7 @@
 import { apiClient } from './apiClient';
 import { ApiResponse, PaginatedResult } from './types';
 
-export type RequisitionStatus = 'Draft' | 'Submitted' | 'Approved' | 'Rejected' | 'ReturnedForCorrection';
+export type RequisitionStatus = 'Draft' | 'Submitted' | 'Approved' | 'Rejected' | 'ReturnedForCorrection' | 'PartiallyFulfilled' | 'FullyFulfilled';
 export type RequisitionPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
 
 export interface ProjectDto {
@@ -167,5 +167,10 @@ export const requisitionService = {
 
   async deleteRequisition(id: string): Promise<void> {
     await apiClient.delete<null>(`/requisitions/${encodeURIComponent(id)}`);
+  },
+
+  async getFulfillmentDetails(id: string): Promise<any> {
+    const res = await apiClient.get<any>(`/requisitions/${encodeURIComponent(id)}/fulfillment`);
+    return res.data;
   },
 };

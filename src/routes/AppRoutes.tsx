@@ -19,6 +19,18 @@ import { RateComparisonPage } from '../pages/RateComparisonPage';
 import { GrnListPage } from '../pages/GrnListPage';
 import { CreateGrnPage } from '../pages/CreateGrnPage';
 import { GrnDetailPage } from '../pages/GrnDetailPage';
+import { StockBalancesPage } from '../pages/StockBalancesPage';
+import { StockLedgerPage } from '../pages/StockLedgerPage';
+import { InventoryValuationPage } from '../pages/InventoryValuationPage';
+import { InventoryReconciliationPage } from '../pages/InventoryReconciliationPage';
+import { MaterialIssueListPage } from '../pages/MaterialIssueListPage';
+import { MaterialIssueFormPage } from '../pages/MaterialIssueFormPage';
+import { MaterialIssueDetailPage } from '../pages/MaterialIssueDetailPage';
+import { MaterialIssueApprovalInboxPage } from '../pages/MaterialIssueApprovalInboxPage';
+import { MaterialReturnListPage } from '../pages/MaterialReturnListPage';
+import { MaterialReturnFormPage } from '../pages/MaterialReturnFormPage';
+import { MaterialReturnDetailPage } from '../pages/MaterialReturnDetailPage';
+import { RequisitionFulfillmentPage } from '../pages/RequisitionFulfillmentPage';
 import { ModulePlaceholderPage } from '../pages/ModulePlaceholderPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { LoadingSpinner } from '../components/common/EmptyState';
@@ -237,6 +249,15 @@ export const AppRoutes: React.FC = () => {
       />
 
       <Route
+        path="/requisitions/:id/fulfillment"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']}>
+            <RequisitionFulfillmentPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/approvals"
         element={
           <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager']}>
@@ -361,17 +382,16 @@ export const AppRoutes: React.FC = () => {
         path="/stock"
         element={
           <ProtectedRoute>
-            <ModulePlaceholderPage
-              moduleName="Stock Balances"
-              category="Inventory & Stock"
-              description="Real-time on-hand, reserved, and available quantities by warehouse."
-              targetPrompt="Prompt 6"
-              businessCapabilities={[
-                'Current on-hand balances across all locations',
-                'Reserved vs Available stock calculation',
-                'Balance reconciliation against authoritative ledger',
-              ]}
-            />
+            <StockBalancesPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/inventory/balances"
+        element={
+          <ProtectedRoute>
+            <StockBalancesPage />
           </ProtectedRoute>
         }
       />
@@ -380,17 +400,25 @@ export const AppRoutes: React.FC = () => {
         path="/stock-ledger"
         element={
           <ProtectedRoute>
-            <ModulePlaceholderPage
-              moduleName="Authoritative Stock Ledger"
-              category="Inventory & Stock"
-              description="Immutable, append-only historical audit ledger of every physical inventory movement."
-              targetPrompt="Prompt 6"
-              businessCapabilities={[
-                'Complete chronological movement ledger',
-                'Controlled reversal tracking (no silent deletes)',
-                'Exportable audit trail statement',
-              ]}
-            />
+            <StockLedgerPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/inventory/ledger"
+        element={
+          <ProtectedRoute>
+            <StockLedgerPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/inventory/reconciliation"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'AccountsOfficer', 'ProjectManager']}>
+            <InventoryReconciliationPage />
           </ProtectedRoute>
         }
       />
@@ -414,40 +442,67 @@ export const AppRoutes: React.FC = () => {
         }
       />
 
+      {/* Material Issues */}
       <Route
         path="/material-issues"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper']}>
-            <ModulePlaceholderPage
-              moduleName="Material Issues to Work"
-              category="Inventory & Stock"
-              description="Stock issuance for structural pours, MEP installations, and finishing works."
-              targetPrompt="Prompt 6"
-              businessCapabilities={[
-                'Stock issuance against approved requisitions',
-                'Depletion at moving weighted-average cost',
-                'Cost allocation to WBS work packages',
-              ]}
-            />
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+            <MaterialIssueListPage />
           </ProtectedRoute>
         }
       />
 
       <Route
+        path="/material-issues/new"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+            <MaterialIssueFormPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/material-issues/approval-inbox"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager']}>
+            <MaterialIssueApprovalInboxPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/material-issues/:id"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+            <MaterialIssueDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Material Returns */}
+      <Route
         path="/material-returns"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper']}>
-            <ModulePlaceholderPage
-              moduleName="Site Material Returns"
-              category="Inventory & Stock"
-              description="Restocking of unused materials, off-cuts, and formwork back into depot stock."
-              targetPrompt="Prompt 6"
-              businessCapabilities={[
-                'Material return entry with condition inspection',
-                'Cost recalculation at original issuance rate',
-                'Waste minimization and recycling tracking',
-              ]}
-            />
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+            <MaterialReturnListPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/material-returns/new"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+            <MaterialReturnFormPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/material-returns/:id"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+            <MaterialReturnDetailPage />
           </ProtectedRoute>
         }
       />
@@ -476,17 +531,7 @@ export const AppRoutes: React.FC = () => {
         path="/reports/valuation"
         element={
           <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'AccountsOfficer']}>
-            <ModulePlaceholderPage
-              moduleName="Inventory Valuation (WAC)"
-              category="Reports & Valuation"
-              description="Financial inventory balance valued strictly using continuous moving weighted-average costing."
-              targetPrompt="Prompt 6"
-              businessCapabilities={[
-                'Weighted-average cost audit reports',
-                'Valuation roll-up by material category and location',
-                'Zero float rounding drift reconciliation',
-              ]}
-            />
+            <InventoryValuationPage />
           </ProtectedRoute>
         }
       />

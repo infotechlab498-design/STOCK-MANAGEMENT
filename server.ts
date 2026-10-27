@@ -1385,31 +1385,39 @@ function setupApiRoutes(router: express.Router) {
   ];
 
   function canUserAccessProject(user: JwtPayload, projectId: string): boolean {
-    if (user.roles.includes('SuperAdmin') || user.roles.includes('InventoryManager')) {
+    if (!user) return false;
+    const dbUser = enterpriseUsers.find((u) => u.id === user.sub);
+    const roles = (dbUser ? dbUser.roles : user.roles) || [];
+    if (roles.includes('SuperAdmin') || roles.includes('InventoryManager') || roles.includes('AccountsOfficer')) {
       return true;
     }
-    if (user.projectScopes.includes('*') || user.projectScopes.includes(projectId)) {
-      return true;
-    }
-    return false;
+    const scopes = (dbUser ? dbUser.projectScopes : user.projectScopes) || [];
+    return scopes.includes('*') || scopes.includes(projectId);
   }
 
   function canUserAccessWarehouse(user: JwtPayload, warehouseId: string): boolean {
-    if (user.roles.includes('SuperAdmin') || user.roles.includes('InventoryManager') || user.roles.includes('AccountsOfficer')) {
+    if (!user) return false;
+    const dbUser = enterpriseUsers.find((u) => u.id === user.sub);
+    const roles = (dbUser ? dbUser.roles : user.roles) || [];
+    if (roles.includes('SuperAdmin') || roles.includes('InventoryManager') || roles.includes('AccountsOfficer')) {
       return true;
     }
-    if (user.warehouseScopes.includes('*') || user.warehouseScopes.includes(warehouseId)) {
-      return true;
-    }
-    return false;
+    const scopes = (dbUser ? dbUser.warehouseScopes : user.warehouseScopes) || [];
+    return scopes.includes('*') || scopes.includes(warehouseId);
   }
 
   function canUserAccessLocation(user: JwtPayload, projectId?: string, warehouseId?: string): boolean {
-    if (user.roles.includes('SuperAdmin') || user.roles.includes('InventoryManager') || user.roles.includes('AccountsOfficer')) {
+    if (!user) return false;
+    const dbUser = enterpriseUsers.find((u) => u.id === user.sub);
+    const roles = (dbUser ? dbUser.roles : user.roles) || [];
+    if (roles.includes('SuperAdmin') || roles.includes('InventoryManager') || roles.includes('AccountsOfficer')) {
       return true;
     }
     const hasProject = !projectId || canUserAccessProject(user, projectId);
     const hasWarehouse = !warehouseId || canUserAccessWarehouse(user, warehouseId);
+    if (roles.includes('Storekeeper') && hasWarehouse) {
+      return true;
+    }
     return hasProject && hasWarehouse;
   }
 
@@ -2457,6 +2465,252 @@ function setupApiRoutes(router: express.Router) {
     lastUpdatedUtc: string;
   }
 
+  // MATERIAL ISSUES & SITE CONSUMPTION MODELS
+  interface MaterialIssueItemRecord {
+    id: string;
+    materialIssueId: string;
+    requisitionItemId: string;
+    materialId: string;
+    materialCode: string;
+    materialName: string;
+    unitCode: string;
+    requestedQuantity: number;
+    previouslyFulfilledQuantity: number;
+    outstandingQuantity: number;
+    quantityToIssue: number;
+    actualIssuedQuantity?: number;
+    previouslyReturnedQuantity?: number;
+    unitCost?: number;
+    totalIssuedAmount?: number;
+    storageLocation?: string;
+    remarks?: string;
+    stockLedgerEntryId?: string;
+  }
+
+  interface MaterialIssueAuditRecord {
+    id: string;
+    materialIssueId: string;
+    actorUserId: string;
+    actorName: string;
+    actorRole: string;
+    action: 'DraftCreated' | 'Updated' | 'Submitted' | 'Approved' | 'Posted' | 'Rejected' | 'ReturnedForCorrection' | 'Cancelled';
+    comments?: string;
+    timestampUtc: string;
+  }
+
+  interface MaterialIssueRecord {
+    id: string;
+    issueNumber: string; // e.g. MIV-2026-0001
+    requisitionId: string;
+    requisitionNumber: string;
+    projectId: string;
+    projectName: string;
+    warehouseId: string;
+    warehouseName: string;
+    issueDate: string; // YYYY-MM-DD
+    status: 'Draft' | 'Submitted' | 'Approved' | 'Posted' | 'Rejected' | 'ReturnedForCorrection' | 'Cancelled';
+    purpose: string;
+    workActivity?: string;
+    receivedByPerson: string;
+    items: MaterialIssueItemRecord[];
+    auditTrail: MaterialIssueAuditRecord[];
+    rejectionReason?: string;
+    correctionNotes?: string;
+    remarks?: string;
+    createdByUserId: string;
+    createdByName: string;
+    createdAtUtc: string;
+    submittedByUserId?: string;
+    submittedByName?: string;
+    submittedAtUtc?: string;
+    approvedByUserId?: string;
+    approvedByName?: string;
+    approvedAtUtc?: string;
+    postedByUserId?: string;
+    postedByName?: string;
+    postedAtUtc?: string;
+    updatedAtUtc?: string;
+  }
+
+  // MATERIAL RETURNS MODELS
+  interface MaterialReturnItemRecord {
+    id: string;
+    materialReturnId: string;
+    materialIssueItemId: string;
+    materialId: string;
+    materialCode: string;
+    materialName: string;
+    unitCode: string;
+    issuedQuantity: number;
+    previouslyReturnedQuantity: number;
+    maxReturnableQuantity: number;
+    returnedQuantity: number;
+    condition: 'ReusableGood' | 'Damaged' | 'UnusableScrap';
+    disposition: 'ReturnToUsableStock' | 'QuarantineScrap' | 'SupplierRTV';
+    unitCost: number;
+    totalReturnAmount: number;
+    inspectionNotes?: string;
+    stockLedgerEntryId?: string;
+  }
+
+  interface MaterialReturnAuditRecord {
+    id: string;
+    materialReturnId: string;
+    actorUserId: string;
+    actorName: string;
+    actorRole: string;
+    action: 'DraftCreated' | 'Updated' | 'Submitted' | 'Inspected' | 'Approved' | 'Posted' | 'Rejected' | 'Cancelled';
+    comments?: string;
+    timestampUtc: string;
+  }
+
+  interface MaterialReturnRecord {
+    id: string;
+    returnNumber: string; // e.g. MRN-2026-0001
+    materialIssueId: string;
+    materialIssueNumber: string;
+    requisitionId: string;
+    requisitionNumber: string;
+    projectId: string;
+    projectName: string;
+    warehouseId: string;
+    warehouseName: string;
+    returnDate: string;
+    returnedByPerson: string;
+    reason: string;
+    status: 'Draft' | 'Submitted' | 'Inspected' | 'Approved' | 'Posted' | 'Rejected' | 'Cancelled';
+    items: MaterialReturnItemRecord[];
+    auditTrail: MaterialReturnAuditRecord[];
+    rejectionReason?: string;
+    remarks?: string;
+    createdByUserId: string;
+    createdByName: string;
+    createdAtUtc: string;
+    inspectedByUserId?: string;
+    inspectedByName?: string;
+    inspectedAtUtc?: string;
+    approvedByUserId?: string;
+    approvedByName?: string;
+    approvedAtUtc?: string;
+    postedByUserId?: string;
+    postedByName?: string;
+    postedAtUtc?: string;
+    updatedAtUtc?: string;
+  }
+
+  const materialIssuesFile = path.join(DATA_DIR, 'material_issues.json');
+  const materialReturnsFile = path.join(DATA_DIR, 'material_returns.json');
+  const stockTransfersFile = path.join(DATA_DIR, 'stock_transfers.json');
+
+  // STOCK TRANSFERS & IN-TRANSIT MODELS
+  interface StockTransferItemRecord {
+    id: string;
+    stockTransferId: string;
+    materialId: string;
+    materialCode: string;
+    materialName: string;
+    unitCode: string;
+    requestedQuantity: number;
+    approvedQuantity: number;
+    dispatchedQuantity: number;
+    receivedGoodQuantity: number;
+    damagedQuantity: number;
+    shortQuantity: number;
+    disputedQuantity: number;
+    remainingInTransitQuantity: number;
+    unitCostAtDispatch: number;
+    totalDispatchedAmount: number;
+    sourceStockLedgerEntryId?: string;
+    destinationStockLedgerEntryId?: string;
+    discrepancyReason?: string;
+    inspectionNotes?: string;
+    resolutionStatus?: 'Pending' | 'Resolved' | 'None';
+    resolutionNotes?: string;
+  }
+
+  interface StockTransferAuditRecord {
+    id: string;
+    stockTransferId: string;
+    actorUserId: string;
+    actorName: string;
+    actorRole: string;
+    action:
+      | 'DraftCreated'
+      | 'Updated'
+      | 'Submitted'
+      | 'Approved'
+      | 'Dispatched'
+      | 'PartiallyReceived'
+      | 'Received'
+      | 'Inspected'
+      | 'Completed'
+      | 'Rejected'
+      | 'ReturnedForCorrection'
+      | 'Cancelled'
+      | 'DiscrepancyResolved';
+    comments?: string;
+    timestampUtc: string;
+  }
+
+  type TransferStatus =
+    | 'Draft'
+    | 'Submitted'
+    | 'Approved'
+    | 'Dispatched'
+    | 'PartiallyReceived'
+    | 'Received'
+    | 'Completed'
+    | 'Rejected'
+    | 'ReturnedForCorrection'
+    | 'Cancelled';
+
+  interface StockTransferRecord {
+    id: string;
+    transferNumber: string; // e.g. STN-2026-0001
+    sourceWarehouseId: string;
+    sourceWarehouseName: string;
+    sourceProjectId: string;
+    sourceProjectName: string;
+    destinationWarehouseId: string;
+    destinationWarehouseName: string;
+    destinationProjectId: string;
+    destinationProjectName: string;
+    requestDate: string; // YYYY-MM-DD
+    plannedDispatchDate?: string;
+    actualDispatchDate?: string;
+    expectedArrivalDate?: string;
+    actualReceiptDate?: string;
+    purpose: string;
+    transferReason?: string;
+    priority: 'Low' | 'Medium' | 'High' | 'Urgent';
+    status: TransferStatus;
+    discrepancyStatus?: 'None' | 'PendingReview' | 'Resolved';
+    items: StockTransferItemRecord[];
+    auditTrail: StockTransferAuditRecord[];
+    rejectionReason?: string;
+    correctionNotes?: string;
+    remarks?: string;
+    createdByUserId: string;
+    createdByName: string;
+    createdAtUtc: string;
+    submittedByUserId?: string;
+    submittedByName?: string;
+    submittedAtUtc?: string;
+    approvedByUserId?: string;
+    approvedByName?: string;
+    approvedAtUtc?: string;
+    dispatchedByUserId?: string;
+    dispatchedByName?: string;
+    dispatchedAtUtc?: string;
+    receivedByUserId?: string;
+    receivedByName?: string;
+    receivedAtUtc?: string;
+    completedByUserId?: string;
+    completedByName?: string;
+    completedAtUtc?: string;
+    updatedAtUtc?: string;
+  }
+
   const defaultSuppliers: SupplierRecord[] = [
     {
       id: 'SUP-APEX-01',
@@ -2516,6 +2770,8 @@ function setupApiRoutes(router: express.Router) {
   readJsonSafe(receiptLedgerFile, []);
   readJsonSafe(stockLedgerFile, []);
   readJsonSafe(inventoryBalancesFile, []);
+  readJsonSafe(materialIssuesFile, []);
+  readJsonSafe(materialReturnsFile, []);
 
   // Helper: Number formatting and precision
   function round2(num: number): number {
@@ -2695,6 +2951,315 @@ function setupApiRoutes(router: express.Router) {
     }
 
     return { success: true, postedCount };
+  }
+
+  // Authoritative Inventory Posting Service: Posts approved Material Issue lines to Stock Ledger and reduces Inventory Balances
+  function postMaterialIssueToStockLedger(
+    issue: MaterialIssueRecord,
+    user: JwtPayload,
+    nowUtc: string,
+    stockLedger: StockLedgerRecord[],
+    inventoryBalances: InventoryBalanceRecord[],
+    requisitions: RequisitionRecord[]
+  ): { success: boolean; error?: string; postedCount: number } {
+    // 1. Availability Pre-Check
+    for (const item of issue.items) {
+      if (item.quantityToIssue <= 0) continue;
+
+      const balance = inventoryBalances.find(
+        (b) =>
+          (b.materialId === item.materialId || b.materialCode === item.materialCode) &&
+          b.warehouseId === issue.warehouseId &&
+          b.projectId === issue.projectId
+      ) || inventoryBalances.find(
+        (b) => b.materialId === item.materialId || b.materialCode === item.materialCode
+      );
+
+      const availableQty = balance ? (balance.quantityAvailable ?? balance.quantityOnHand ?? 0) : 0;
+      if (availableQty < item.quantityToIssue) {
+        return {
+          success: false,
+          error: `Insufficient available stock in warehouse '${issue.warehouseName}' for material '${item.materialCode}' (${item.materialName}). Available stock: ${availableQty} ${item.unitCode}, Requested to issue: ${item.quantityToIssue} ${item.unitCode}.`,
+          postedCount: 0,
+        };
+      }
+    }
+
+    let postedCount = 0;
+
+    for (const item of issue.items) {
+      if (item.quantityToIssue <= 0) continue;
+
+      const idempotencyKey = `ISSUE_${issue.id}_ITEM_${item.id}`;
+      const alreadyPosted = stockLedger.some((e) => e.idempotencyKey === idempotencyKey);
+      if (alreadyPosted) {
+        continue;
+      }
+
+      const balance = inventoryBalances.find(
+        (b) =>
+          (b.materialId === item.materialId || b.materialCode === item.materialCode) &&
+          b.warehouseId === issue.warehouseId &&
+          b.projectId === issue.projectId
+      ) || inventoryBalances.find(
+        (b) => b.materialId === item.materialId || b.materialCode === item.materialCode
+      );
+
+      if (!balance || (balance.quantityOnHand ?? 0) < item.quantityToIssue) {
+        return {
+          success: false,
+          error: `Stock check failed during posting: Material '${item.materialCode}' has insufficient stock on hand.`,
+          postedCount: 0,
+        };
+      }
+
+      const prevQty = balance.quantityOnHand;
+      const currentWac = balance.weightedAverageCost ?? (balance as any).weightedAverageUnitCost ?? 0;
+      const issueQty = item.quantityToIssue;
+
+      const newQty = round2(prevQty - issueQty);
+      const newVal = round2(newQty * currentWac);
+      const nextRefNumber = generateNextStockLedgerNumber(stockLedger);
+
+      item.actualIssuedQuantity = issueQty;
+      item.unitCost = currentWac;
+      item.totalIssuedAmount = round2(issueQty * currentWac);
+
+      const ledgerEntry: StockLedgerRecord = {
+        id: `STK-TXN-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`,
+        referenceNumber: nextRefNumber,
+        transactionType: 'MaterialIssue',
+        sourceDocumentType: 'MaterialIssue',
+        sourceDocumentId: issue.id,
+        sourceDocumentNumber: issue.issueNumber,
+        sourceLineId: item.id,
+        materialId: item.materialId,
+        materialCode: item.materialCode,
+        materialName: item.materialName,
+        unitCode: item.unitCode,
+        warehouseId: issue.warehouseId,
+        warehouseName: issue.warehouseName,
+        projectId: issue.projectId,
+        projectName: issue.projectName,
+        quantityIn: 0,
+        quantityOut: issueQty,
+        signedQuantity: -issueQty,
+        unitCost: currentWac,
+        transactionValue: item.totalIssuedAmount,
+        balanceQuantityAfter: newQty,
+        weightedAverageCostAfter: currentWac,
+        totalValuationAfter: newVal,
+        idempotencyKey,
+        transactionDate: issue.issueDate || nowUtc.split('T')[0],
+        timestampUtc: nowUtc,
+        createdByUserId: user.sub,
+        createdByName: user.fullName,
+        remarks: `Material issue dispatch for purpose: ${issue.purpose}. Requisition: ${issue.requisitionNumber}. Receiver: ${issue.receivedByPerson}.`,
+      };
+
+      stockLedger.unshift(ledgerEntry);
+      item.stockLedgerEntryId = ledgerEntry.id;
+
+      balance.quantityOnHand = newQty;
+      balance.quantityAvailable = round2(newQty - balance.quantityReserved);
+      balance.inventoryValue = newVal;
+      balance.lastUpdatedUtc = nowUtc;
+      balance.version += 1;
+
+      postedCount++;
+    }
+
+    // 2. Update source requisition fulfillment quantities and overall requisition status
+    const req = requisitions.find((r) => r.id === issue.requisitionId || r.requisitionNumber === issue.requisitionNumber);
+    if (req) {
+      for (const issueItem of issue.items) {
+        const reqItem = req.items.find((ri) => ri.id === issueItem.requisitionItemId || ri.materialId === issueItem.materialId);
+        if (reqItem) {
+          (reqItem as any).issuedQuantity = round2(((reqItem as any).issuedQuantity || 0) + issueItem.quantityToIssue);
+          (reqItem as any).outstandingQuantity = round2(Math.max(0, reqItem.requestedQuantity - ((reqItem as any).issuedQuantity || 0)));
+        }
+      }
+
+      let totalReq = 0;
+      let totalIssued = 0;
+      for (const ri of req.items) {
+        totalReq += ri.requestedQuantity;
+        totalIssued += ((ri as any).issuedQuantity || 0);
+      }
+
+      if (totalIssued >= totalReq) {
+        req.status = 'FullyFulfilled' as any;
+      } else if (totalIssued > 0) {
+        req.status = 'PartiallyFulfilled' as any;
+      }
+      req.updatedAtUtc = nowUtc;
+    }
+
+    return { success: true, postedCount };
+  }
+
+  // Authoritative Inventory Posting Service: Posts approved Material Return lines to Stock Ledger
+  function postMaterialReturnToStockLedger(
+    returnDoc: MaterialReturnRecord,
+    user: JwtPayload,
+    nowUtc: string,
+    stockLedger: StockLedgerRecord[],
+    inventoryBalances: InventoryBalanceRecord[],
+    issues: MaterialIssueRecord[],
+    materials: MaterialRecord[]
+  ): { success: boolean; error?: string; postedCount: number } {
+    let postedCount = 0;
+
+    for (const item of returnDoc.items) {
+      if (item.returnedQuantity <= 0) continue;
+
+      if (item.condition === 'ReusableGood' && item.disposition === 'ReturnToUsableStock') {
+        const idempotencyKey = `RETURN_${returnDoc.id}_ITEM_${item.id}`;
+        const alreadyPosted = stockLedger.some((e) => e.idempotencyKey === idempotencyKey);
+        if (alreadyPosted) {
+          continue;
+        }
+
+        let balance = inventoryBalances.find(
+          (b) =>
+            (b.materialId === item.materialId || b.materialCode === item.materialCode) &&
+            b.warehouseId === returnDoc.warehouseId &&
+            b.projectId === returnDoc.projectId
+        ) || inventoryBalances.find(
+          (b) => b.materialId === item.materialId || b.materialCode === item.materialCode
+        );
+
+        const prevQty = balance ? balance.quantityOnHand : 0;
+        const prevWac = balance ? balance.weightedAverageCost : item.unitCost;
+        const inQty = item.returnedQuantity;
+        const inCost = item.unitCost;
+
+        const { newQty, newWac, newVal } = calculateWeightedAverageCost(prevQty, prevWac, inQty, inCost);
+        const nextRefNumber = generateNextStockLedgerNumber(stockLedger);
+
+        const ledgerEntry: StockLedgerRecord = {
+          id: `STK-TXN-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`,
+          referenceNumber: nextRefNumber,
+          transactionType: 'SiteReturn',
+          sourceDocumentType: 'MaterialReturn',
+          sourceDocumentId: returnDoc.id,
+          sourceDocumentNumber: returnDoc.returnNumber,
+          sourceLineId: item.id,
+          materialId: item.materialId,
+          materialCode: item.materialCode,
+          materialName: item.materialName,
+          unitCode: item.unitCode,
+          warehouseId: returnDoc.warehouseId,
+          warehouseName: returnDoc.warehouseName,
+          projectId: returnDoc.projectId,
+          projectName: returnDoc.projectName,
+          quantityIn: inQty,
+          quantityOut: 0,
+          signedQuantity: inQty,
+          unitCost: inCost,
+          transactionValue: round2(inQty * inCost),
+          balanceQuantityAfter: newQty,
+          weightedAverageCostAfter: newWac,
+          totalValuationAfter: newVal,
+          idempotencyKey,
+          transactionDate: returnDoc.returnDate || nowUtc.split('T')[0],
+          timestampUtc: nowUtc,
+          createdByUserId: user.sub,
+          createdByName: user.fullName,
+          remarks: `Material return intake (Condition: ${item.condition}). Reason: ${returnDoc.reason}. Returning person: ${returnDoc.returnedByPerson}.`,
+        };
+
+        stockLedger.unshift(ledgerEntry);
+        item.stockLedgerEntryId = ledgerEntry.id;
+
+        if (balance) {
+          balance.quantityOnHand = newQty;
+          balance.quantityAvailable = round2(newQty - balance.quantityReserved);
+          balance.weightedAverageCost = newWac;
+          balance.inventoryValue = newVal;
+          balance.lastUpdatedUtc = nowUtc;
+          balance.version += 1;
+        } else {
+          const material = materials.find((m) => m.id === item.materialId);
+          balance = {
+            id: `BAL-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`,
+            materialId: item.materialId,
+            materialCode: item.materialCode,
+            materialName: item.materialName,
+            categoryId: material?.categoryId,
+            categoryName: material?.categoryName,
+            unitCode: item.unitCode,
+            warehouseId: returnDoc.warehouseId,
+            warehouseName: returnDoc.warehouseName,
+            projectId: returnDoc.projectId,
+            projectName: returnDoc.projectName,
+            quantityOnHand: newQty,
+            quantityReserved: 0,
+            quantityAvailable: newQty,
+            quantityInTransit: 0,
+            weightedAverageCost: newWac,
+            inventoryValue: newVal,
+            version: 1,
+            lastUpdatedUtc: nowUtc,
+          };
+          inventoryBalances.push(balance);
+        }
+
+        postedCount++;
+      }
+    }
+
+    // Update previously returned quantities on source material issue
+    const issue = issues.find((i) => i.id === returnDoc.materialIssueId);
+    if (issue) {
+      for (const retItem of returnDoc.items) {
+        const issueItem = issue.items.find((ii) => ii.id === retItem.materialIssueItemId || ii.materialId === retItem.materialId);
+        if (issueItem) {
+          issueItem.previouslyReturnedQuantity = round2((issueItem.previouslyReturnedQuantity || 0) + retItem.returnedQuantity);
+        }
+      }
+      issue.updatedAtUtc = nowUtc;
+    }
+
+    return { success: true, postedCount };
+  }
+
+  // Helper: Next Issue Number generator (e.g. MIV-2026-0001)
+  function generateNextIssueNumber(issues: MaterialIssueRecord[]): string {
+    const currentYear = new Date().getFullYear();
+    const prefix = `MIV-${currentYear}-`;
+    const yearIssues = issues.filter((i) => i.issueNumber && i.issueNumber.startsWith(prefix));
+    let maxSeq = 0;
+    for (const i of yearIssues) {
+      const parts = i.issueNumber.split('-');
+      if (parts.length === 3) {
+        const seq = parseInt(parts[2], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+    const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
+    return `${prefix}${nextSeq}`;
+  }
+
+  // Helper: Next Return Number generator (e.g. MRN-2026-0001)
+  function generateNextReturnNumber(returns: MaterialReturnRecord[]): string {
+    const currentYear = new Date().getFullYear();
+    const prefix = `MRN-${currentYear}-`;
+    const yearReturns = returns.filter((r) => r.returnNumber && r.returnNumber.startsWith(prefix));
+    let maxSeq = 0;
+    for (const r of yearReturns) {
+      const parts = r.returnNumber.split('-');
+      if (parts.length === 3) {
+        const seq = parseInt(parts[2], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+    const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
+    return `${prefix}${nextSeq}`;
   }
 
   // Helper: Next PO Number generator (e.g. PO-2026-0001)
@@ -5794,8 +6359,2568 @@ function setupApiRoutes(router: express.Router) {
     });
   });
 
+  // ========================================================================
+  // API: MATERIAL ISSUES & SITE CONSUMPTION
+  // ========================================================================
+
+  // GET /api/material-issues (Paginated & Scoped List)
+  router.get('/material-issues', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const user = req.user!;
+    const { search, status, requisitionId, projectId, warehouseId, page, pageSize } = req.query;
+
+    let filtered = issues.filter((i) => canUserAccessLocation(user, i.projectId, i.warehouseId));
+
+    if (search && typeof search === 'string') {
+      const term = search.trim().toUpperCase();
+      filtered = filtered.filter(
+        (i) =>
+          i.issueNumber.toUpperCase().includes(term) ||
+          i.requisitionNumber.toUpperCase().includes(term) ||
+          i.purpose.toUpperCase().includes(term) ||
+          i.receivedByPerson.toUpperCase().includes(term) ||
+          i.items.some((it) => it.materialCode.toUpperCase().includes(term) || it.materialName.toUpperCase().includes(term))
+      );
+    }
+
+    if (status && typeof status === 'string' && status !== 'ALL') {
+      filtered = filtered.filter((i) => i.status === status);
+    }
+
+    if (requisitionId && typeof requisitionId === 'string' && requisitionId !== 'ALL') {
+      filtered = filtered.filter((i) => i.requisitionId === requisitionId || i.requisitionNumber === requisitionId);
+    }
+
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      filtered = filtered.filter((i) => i.projectId === projectId);
+    }
+
+    if (warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL') {
+      filtered = filtered.filter((i) => i.warehouseId === warehouseId);
+    }
+
+    filtered.sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
+
+    if (page && pageSize) {
+      const pageIndex = Math.max(1, parseInt(page as string, 10) || 1);
+      const size = Math.max(1, parseInt(pageSize as string, 10) || 20);
+      const totalCount = filtered.length;
+      const totalPages = Math.ceil(totalCount / size);
+      const paged = filtered.slice((pageIndex - 1) * size, pageIndex * size);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          items: paged,
+          pageIndex,
+          pageSize: size,
+          totalCount,
+          totalPages,
+        },
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: filtered,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/material-issues/:id
+  router.get('/material-issues/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const user = req.user!;
+    const issue = issues.find((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+
+    if (!issue) {
+      return res.status(404).json({
+        success: false,
+        message: `Material issue '${req.params.id}' was not found`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    if (!canUserAccessLocation(user, issue.projectId, issue.warehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to view material issues for this site/warehouse location',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: issue,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // POST /api/material-issues (Create Draft Material Issue)
+  router.post('/material-issues', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const { requisitionId, warehouseId, purpose, workActivity, receivedByPerson, issueDate, items, remarks, submitImmediately } = req.body || {};
+    const user = req.user!;
+    const nowUtc = new Date().toISOString();
+
+    if (!requisitionId) {
+      return res.status(400).json({ success: false, message: 'Source approved requisition is required' });
+    }
+
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const reqDoc = requisitions.find((r) => r.id === requisitionId || r.requisitionNumber === requisitionId);
+
+    if (!reqDoc) {
+      return res.status(400).json({ success: false, message: `Source requisition '${requisitionId}' was not found` });
+    }
+
+    // Business Rule: Requisition must be Approved or PartiallyFulfilled!
+    if (reqDoc.status !== 'Approved' && (reqDoc.status as string) !== 'PartiallyFulfilled') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot issue materials for requisition '${reqDoc.requisitionNumber}'. Status is '${reqDoc.status}', but must be 'Approved' or 'PartiallyFulfilled'.`,
+      });
+    }
+
+    if (!warehouseId) {
+      return res.status(400).json({ success: false, message: 'Issuing warehouse/yard selection is required' });
+    }
+
+    if (!canUserAccessLocation(user, reqDoc.projectId, warehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: You do not have access to issue stock for project '${reqDoc.projectName}' and warehouse '${warehouseId}'`,
+      });
+    }
+
+    if (!purpose || !String(purpose).trim()) {
+      return res.status(400).json({ success: false, message: 'Issue purpose / site activity description is required' });
+    }
+
+    if (!receivedByPerson || !String(receivedByPerson).trim()) {
+      return res.status(400).json({ success: false, message: 'Receiving supervisor / contractor name is required' });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Material issue must have at least one line item' });
+    }
+
+    // Check existing issues for previous fulfillment calculations
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const postedIssues = issues.filter((i) => (i.requisitionId === reqDoc.id || i.requisitionNumber === reqDoc.requisitionNumber) && i.status === 'Posted');
+
+    const parsedItems: MaterialIssueItemRecord[] = [];
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const line = items[idx];
+      const reqItem = reqDoc.items.find((ri) => ri.id === line.requisitionItemId || ri.materialId === line.materialId);
+
+      if (!reqItem) {
+        return res.status(400).json({ success: false, message: `Line #${idx + 1}: Requisition item '${line.requisitionItemId || line.materialId}' was not found on source requisition` });
+      }
+
+      const qtyToIssue = parseFloat(line.quantityToIssue);
+      if (isNaN(qtyToIssue) || qtyToIssue <= 0) {
+        return res.status(400).json({ success: false, message: `Line #${idx + 1} (${reqItem.materialName}): Issue quantity must be greater than 0` });
+      }
+
+      // Calculate previously fulfilled quantity across posted issues
+      let prevFulfilled = 0;
+      for (const pIss of postedIssues) {
+        for (const pIt of pIss.items) {
+          if (pIt.requisitionItemId === reqItem.id || pIt.materialId === reqItem.materialId) {
+            prevFulfilled += (pIt.actualIssuedQuantity || pIt.quantityToIssue || 0);
+          }
+        }
+      }
+      prevFulfilled = round2(prevFulfilled);
+      const outstandingQty = round2(Math.max(0, reqItem.requestedQuantity - prevFulfilled));
+
+      if (qtyToIssue > outstandingQty) {
+        return res.status(400).json({
+          success: false,
+          message: `Line #${idx + 1} (${reqItem.materialName}): Requested issue quantity (${qtyToIssue} ${reqItem.unitCode}) exceeds remaining approved quantity (${outstandingQty} ${reqItem.unitCode}). Requested: ${reqItem.requestedQuantity}, Already Fulfilled: ${prevFulfilled}.`,
+        });
+      }
+
+      parsedItems.push({
+        id: `MII-${Date.now().toString(36)}-${idx}-${crypto.randomBytes(2).toString('hex')}`,
+        materialIssueId: '',
+        requisitionItemId: reqItem.id,
+        materialId: reqItem.materialId,
+        materialCode: reqItem.materialCode,
+        materialName: reqItem.materialName,
+        unitCode: reqItem.unitCode,
+        requestedQuantity: reqItem.requestedQuantity,
+        previouslyFulfilledQuantity: prevFulfilled,
+        outstandingQuantity: outstandingQty,
+        quantityToIssue: qtyToIssue,
+        storageLocation: line.storageLocation || 'Site Yard',
+        remarks: line.remarks || '',
+      });
+    }
+
+    const warehouseName = warehouseId === 'WH-02' ? 'North Industrial Depot & Yard' : (warehouseId === 'WH-03' ? 'East Harbor Hub' : 'Metro Central Staging Yard');
+    const newIssueNumber = generateNextIssueNumber(issues);
+    const newIssueId = `ISS-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`;
+
+    parsedItems.forEach((it) => (it.materialIssueId = newIssueId));
+
+    const initialStatus = submitImmediately ? 'Submitted' : 'Draft';
+
+    const auditTrail: MaterialIssueAuditRecord[] = [
+      {
+        id: `IA-${crypto.randomBytes(4).toString('hex')}`,
+        materialIssueId: newIssueId,
+        actorUserId: user.sub,
+        actorName: user.fullName,
+        actorRole: user.roles[0] || 'Storekeeper',
+        action: 'DraftCreated',
+        comments: `Material issue draft created against ${reqDoc.requisitionNumber} for activity: ${purpose}`,
+        timestampUtc: nowUtc,
+      },
+    ];
+
+    if (submitImmediately) {
+      auditTrail.push({
+        id: `IA-${crypto.randomBytes(4).toString('hex')}`,
+        materialIssueId: newIssueId,
+        actorUserId: user.sub,
+        actorName: user.fullName,
+        actorRole: user.roles[0] || 'Storekeeper',
+        action: 'Submitted',
+        comments: 'Submitted for issue approval & stock verification.',
+        timestampUtc: nowUtc,
+      });
+    }
+
+    const newIssue: MaterialIssueRecord = {
+      id: newIssueId,
+      issueNumber: newIssueNumber,
+      requisitionId: reqDoc.id,
+      requisitionNumber: reqDoc.requisitionNumber,
+      projectId: reqDoc.projectId,
+      projectName: reqDoc.projectName,
+      warehouseId,
+      warehouseName,
+      issueDate: issueDate || nowUtc.split('T')[0],
+      status: initialStatus,
+      purpose: String(purpose).trim(),
+      workActivity: workActivity ? String(workActivity).trim() : undefined,
+      receivedByPerson: String(receivedByPerson).trim(),
+      items: parsedItems,
+      auditTrail,
+      remarks: remarks ? String(remarks).trim() : undefined,
+      createdByUserId: user.sub,
+      createdByName: user.fullName,
+      createdAtUtc: nowUtc,
+      submittedByUserId: submitImmediately ? user.sub : undefined,
+      submittedByName: submitImmediately ? user.fullName : undefined,
+      submittedAtUtc: submitImmediately ? nowUtc : undefined,
+    };
+
+    issues.unshift(newIssue);
+    writeJsonAtomic(materialIssuesFile, issues);
+
+    return res.status(201).json({
+      success: true,
+      data: newIssue,
+      message: `Material issue ${newIssue.issueNumber} created successfully.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // PUT /api/material-issues/:id (Update Draft Issue)
+  router.put('/material-issues/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const user = req.user!;
+    const issueIndex = issues.findIndex((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+
+    if (issueIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material issue '${req.params.id}' was not found` });
+    }
+
+    const issue = issues[issueIndex];
+
+    if (issue.status === 'Posted') {
+      return res.status(405).json({
+        success: false,
+        message: 'Method Not Allowed: Posted material issues are permanently immutable and cannot be modified.',
+      });
+    }
+
+    if (issue.status !== 'Draft' && issue.status !== 'ReturnedForCorrection') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot edit material issue in '${issue.status}' status. Only Draft or ReturnedForCorrection issues can be edited.`,
+      });
+    }
+
+    const { purpose, workActivity, receivedByPerson, issueDate, items, remarks } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    if (purpose) issue.purpose = String(purpose).trim();
+    if (workActivity !== undefined) issue.workActivity = String(workActivity).trim();
+    if (receivedByPerson) issue.receivedByPerson = String(receivedByPerson).trim();
+    if (issueDate) issue.issueDate = issueDate;
+    if (remarks !== undefined) issue.remarks = String(remarks).trim();
+
+    if (Array.isArray(items) && items.length > 0) {
+      const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+      const reqDoc = requisitions.find((r) => r.id === issue.requisitionId);
+      const postedIssues = issues.filter((i) => i.requisitionId === issue.requisitionId && i.status === 'Posted' && i.id !== issue.id);
+
+      for (let idx = 0; idx < items.length; idx++) {
+        const line = items[idx];
+        const existingItem = issue.items.find((it) => it.id === line.id || it.requisitionItemId === line.requisitionItemId);
+        if (existingItem) {
+          const qtyToIssue = parseFloat(line.quantityToIssue);
+          if (!isNaN(qtyToIssue) && qtyToIssue > 0) {
+            let prevFulfilled = 0;
+            if (reqDoc) {
+              for (const pIss of postedIssues) {
+                for (const pIt of pIss.items) {
+                  if (pIt.requisitionItemId === existingItem.requisitionItemId) {
+                    prevFulfilled += (pIt.actualIssuedQuantity || pIt.quantityToIssue || 0);
+                  }
+                }
+              }
+              const outstanding = round2(Math.max(0, existingItem.requestedQuantity - prevFulfilled));
+              if (qtyToIssue > outstanding) {
+                return res.status(400).json({
+                  success: false,
+                  message: `Line #${idx + 1} (${existingItem.materialName}): Issue quantity (${qtyToIssue}) exceeds remaining approved quantity (${outstanding}).`,
+                });
+              }
+            }
+            existingItem.quantityToIssue = qtyToIssue;
+          }
+          if (line.storageLocation) existingItem.storageLocation = line.storageLocation;
+          if (line.remarks !== undefined) existingItem.remarks = line.remarks;
+        }
+      }
+    }
+
+    issue.auditTrail.push({
+      id: `IA-${crypto.randomBytes(4).toString('hex')}`,
+      materialIssueId: issue.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Updated',
+      comments: 'Material issue details updated.',
+      timestampUtc: nowUtc,
+    });
+
+    issue.updatedAtUtc = nowUtc;
+    issues[issueIndex] = issue;
+    writeJsonAtomic(materialIssuesFile, issues);
+
+    return res.status(200).json({
+      success: true,
+      data: issue,
+      message: `Material issue ${issue.issueNumber} updated successfully.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/material-issues/:id/submit
+  router.post('/material-issues/:id/submit', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const user = req.user!;
+    const issueIndex = issues.findIndex((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+
+    if (issueIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material issue '${req.params.id}' was not found` });
+    }
+
+    const issue = issues[issueIndex];
+    if (issue.status !== 'Draft' && issue.status !== 'ReturnedForCorrection') {
+      return res.status(400).json({ success: false, message: `Cannot submit issue in '${issue.status}' status.` });
+    }
+
+    const nowUtc = new Date().toISOString();
+    issue.status = 'Submitted';
+    issue.submittedByUserId = user.sub;
+    issue.submittedByName = user.fullName;
+    issue.submittedAtUtc = nowUtc;
+
+    issue.auditTrail.push({
+      id: `IA-${crypto.randomBytes(4).toString('hex')}`,
+      materialIssueId: issue.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Submitted',
+      comments: 'Submitted for issue approval & stock verification.',
+      timestampUtc: nowUtc,
+    });
+
+    issue.updatedAtUtc = nowUtc;
+    issues[issueIndex] = issue;
+    writeJsonAtomic(materialIssuesFile, issues);
+
+    return res.status(200).json({ success: true, data: issue, message: `Material issue ${issue.issueNumber} submitted.` });
+  });
+
+  // POST /api/material-issues/:id/approve
+  router.post('/material-issues/:id/approve', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const user = req.user!;
+    const issueIndex = issues.findIndex((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+
+    if (issueIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material issue '${req.params.id}' was not found` });
+    }
+
+    const issue = issues[issueIndex];
+
+    // Dual-control policy: Creator cannot approve their own issue
+    if (issue.createdByUserId === user.sub && !user.roles.includes('SuperAdmin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Dual-control policy violation: You cannot approve a material issue that you created yourself.',
+      });
+    }
+
+    if (issue.status !== 'Submitted') {
+      return res.status(400).json({ success: false, message: `Cannot approve issue in '${issue.status}' status. Must be 'Submitted'.` });
+    }
+
+    const nowUtc = new Date().toISOString();
+    const { comments } = req.body || {};
+
+    issue.status = 'Approved';
+    issue.approvedByUserId = user.sub;
+    issue.approvedByName = user.fullName;
+    issue.approvedAtUtc = nowUtc;
+
+    issue.auditTrail.push({
+      id: `IA-${crypto.randomBytes(4).toString('hex')}`,
+      materialIssueId: issue.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'ProjectManager',
+      action: 'Approved',
+      comments: comments ? String(comments).trim() : 'Material issue approved for stock dispatch.',
+      timestampUtc: nowUtc,
+    });
+
+    issue.updatedAtUtc = nowUtc;
+    issues[issueIndex] = issue;
+    writeJsonAtomic(materialIssuesFile, issues);
+
+    return res.status(200).json({ success: true, data: issue, message: `Material issue ${issue.issueNumber} approved.` });
+  });
+
+  // POST /api/material-issues/:id/reject
+  router.post('/material-issues/:id/reject', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const user = req.user!;
+    const issueIndex = issues.findIndex((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+
+    if (issueIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material issue '${req.params.id}' was not found` });
+    }
+
+    const issue = issues[issueIndex];
+    const { rejectionReason, comments } = req.body || {};
+    const reason = rejectionReason || comments;
+
+    if (!reason || String(reason).trim().length < 5) {
+      return res.status(400).json({ success: false, message: 'Rejection reason / explanation is required (minimum 5 characters).' });
+    }
+
+    const nowUtc = new Date().toISOString();
+    issue.status = 'Rejected';
+    issue.rejectionReason = String(reason).trim();
+
+    issue.auditTrail.push({
+      id: `IA-${crypto.randomBytes(4).toString('hex')}`,
+      materialIssueId: issue.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'ProjectManager',
+      action: 'Rejected',
+      comments: String(reason).trim(),
+      timestampUtc: nowUtc,
+    });
+
+    issue.updatedAtUtc = nowUtc;
+    issues[issueIndex] = issue;
+    writeJsonAtomic(materialIssuesFile, issues);
+
+    return res.status(200).json({ success: true, data: issue, message: `Material issue ${issue.issueNumber} rejected.` });
+  });
+
+  // POST /api/material-issues/:id/return-for-correction
+  router.post('/material-issues/:id/return-for-correction', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const user = req.user!;
+    const issueIndex = issues.findIndex((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+
+    if (issueIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material issue '${req.params.id}' was not found` });
+    }
+
+    const issue = issues[issueIndex];
+    const { correctionNotes, comments } = req.body || {};
+    const notes = correctionNotes || comments;
+
+    if (!notes || String(notes).trim().length < 5) {
+      return res.status(400).json({ success: false, message: 'Correction notes / feedback instructions are required (minimum 5 characters).' });
+    }
+
+    const nowUtc = new Date().toISOString();
+    issue.status = 'ReturnedForCorrection';
+    issue.correctionNotes = String(notes).trim();
+
+    issue.auditTrail.push({
+      id: `IA-${crypto.randomBytes(4).toString('hex')}`,
+      materialIssueId: issue.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'ProjectManager',
+      action: 'ReturnedForCorrection',
+      comments: String(notes).trim(),
+      timestampUtc: nowUtc,
+    });
+
+    issue.updatedAtUtc = nowUtc;
+    issues[issueIndex] = issue;
+    writeJsonAtomic(materialIssuesFile, issues);
+
+    return res.status(200).json({ success: true, data: issue, message: `Material issue ${issue.issueNumber} returned for correction.` });
+  });
+
+  // POST /api/material-issues/:id/post (Post Issue to Stock Ledger & Location Balances)
+  router.post('/material-issues/:id/post', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']), (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const inventoryBalances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const user = req.user!;
+    const nowUtc = new Date().toISOString();
+
+    const issueIndex = issues.findIndex((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+
+    if (issueIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material issue '${req.params.id}' was not found` });
+    }
+
+    const issue = issues[issueIndex];
+
+    // Idempotency / Already Posted check
+    if (issue.status === 'Posted') {
+      return res.status(200).json({
+        success: true,
+        data: issue,
+        message: `Material issue ${issue.issueNumber} was already posted previously to the stock ledger.`,
+        timestampUtc: nowUtc,
+      });
+    }
+
+    if (issue.status !== 'Approved') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot post material issue '${issue.issueNumber}'. Status is '${issue.status}', but must be 'Approved'.`,
+      });
+    }
+
+    // Call authoritative inventory posting service
+    const result = postMaterialIssueToStockLedger(issue, user, nowUtc, stockLedger, inventoryBalances, requisitions);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.error || 'Failed to post material issue to inventory ledger.',
+        timestampUtc: nowUtc,
+      });
+    }
+
+    issue.status = 'Posted';
+    issue.postedByUserId = user.sub;
+    issue.postedByName = user.fullName;
+    issue.postedAtUtc = nowUtc;
+
+    issue.auditTrail.push({
+      id: `IA-${crypto.randomBytes(4).toString('hex')}`,
+      materialIssueId: issue.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Posted',
+      comments: `Material issue posted to stock ledger. ${result.postedCount} line items dispatched. Source requisition status updated.`,
+      timestampUtc: nowUtc,
+    });
+
+    issue.updatedAtUtc = nowUtc;
+    issues[issueIndex] = issue;
+
+    writeJsonAtomic(materialIssuesFile, issues);
+    writeJsonAtomic(stockLedgerFile, stockLedger);
+    writeJsonAtomic(inventoryBalancesFile, inventoryBalances);
+    writeJsonAtomic(requisitionsFile, requisitions);
+
+    return res.status(200).json({
+      success: true,
+      data: issue,
+      message: `Material issue ${issue.issueNumber} posted successfully. Stock balances reduced.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // GET /api/material-issues/:id/history
+  router.get('/material-issues/:id/history', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const issue = issues.find((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+
+    if (!issue) {
+      return res.status(404).json({ success: false, message: `Material issue '${req.params.id}' was not found` });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: issue.auditTrail || [],
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // ========================================================================
+  // API: MATERIAL RETURNS
+  // ========================================================================
+
+  // GET /api/material-returns
+  router.get('/material-returns', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const user = req.user!;
+    const { search, status, materialIssueId, projectId, warehouseId, page, pageSize } = req.query;
+
+    let filtered = returns.filter((r) => canUserAccessLocation(user, r.projectId, r.warehouseId));
+
+    if (search && typeof search === 'string') {
+      const term = search.trim().toUpperCase();
+      filtered = filtered.filter(
+        (r) =>
+          r.returnNumber.toUpperCase().includes(term) ||
+          r.materialIssueNumber.toUpperCase().includes(term) ||
+          r.reason.toUpperCase().includes(term) ||
+          r.returnedByPerson.toUpperCase().includes(term) ||
+          r.items.some((it) => it.materialCode.toUpperCase().includes(term) || it.materialName.toUpperCase().includes(term))
+      );
+    }
+
+    if (status && typeof status === 'string' && status !== 'ALL') {
+      filtered = filtered.filter((r) => r.status === status);
+    }
+
+    if (materialIssueId && typeof materialIssueId === 'string' && materialIssueId !== 'ALL') {
+      filtered = filtered.filter((r) => r.materialIssueId === materialIssueId || r.materialIssueNumber === materialIssueId);
+    }
+
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      filtered = filtered.filter((r) => r.projectId === projectId);
+    }
+
+    if (warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL') {
+      filtered = filtered.filter((r) => r.warehouseId === warehouseId);
+    }
+
+    filtered.sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
+
+    if (page && pageSize) {
+      const pageIndex = Math.max(1, parseInt(page as string, 10) || 1);
+      const size = Math.max(1, parseInt(pageSize as string, 10) || 20);
+      const totalCount = filtered.length;
+      const totalPages = Math.ceil(totalCount / size);
+      const paged = filtered.slice((pageIndex - 1) * size, pageIndex * size);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          items: paged,
+          pageIndex,
+          pageSize: size,
+          totalCount,
+          totalPages,
+        },
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: filtered,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/material-returns/:id
+  router.get('/material-returns/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const user = req.user!;
+    const returnDoc = returns.find((r) => r.id === req.params.id || r.returnNumber === req.params.id);
+
+    if (!returnDoc) {
+      return res.status(404).json({ success: false, message: `Material return '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessLocation(user, returnDoc.projectId, returnDoc.warehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to view material returns for this location',
+      });
+    }
+
+    return res.status(200).json({ success: true, data: returnDoc, timestampUtc: new Date().toISOString() });
+  });
+
+  // POST /api/material-returns (Create Return Draft)
+  router.post('/material-returns', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const { materialIssueId, returnDate, returnedByPerson, reason, items, remarks } = req.body || {};
+    const user = req.user!;
+    const nowUtc = new Date().toISOString();
+
+    if (!materialIssueId) {
+      return res.status(400).json({ success: false, message: 'Source posted material issue ID is required' });
+    }
+
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const issue = issues.find((i) => i.id === materialIssueId || i.issueNumber === materialIssueId);
+
+    if (!issue) {
+      return res.status(400).json({ success: false, message: `Source material issue '${materialIssueId}' was not found` });
+    }
+
+    // Business Rule: Can only return against a POSTED issue!
+    if (issue.status !== 'Posted') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot create return for material issue '${issue.issueNumber}'. Issue status is '${issue.status}', but must be 'Posted'.`,
+      });
+    }
+
+    if (!canUserAccessLocation(user, issue.projectId, issue.warehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: You do not have access to return materials for project '${issue.projectName}'`,
+      });
+    }
+
+    if (!returnedByPerson || !String(returnedByPerson).trim()) {
+      return res.status(400).json({ success: false, message: 'Returning person / supervisor name is required' });
+    }
+
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ success: false, message: 'Return reason description is required' });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Material return must have at least one line item' });
+    }
+
+    // Check existing returns for previously returned calculation
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const postedReturns = returns.filter((r) => r.materialIssueId === issue.id && r.status === 'Posted');
+
+    const parsedItems: MaterialReturnItemRecord[] = [];
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const line = items[idx];
+      const issueItem = issue.items.find((ii) => ii.id === line.materialIssueItemId || ii.materialId === line.materialId);
+
+      if (!issueItem) {
+        return res.status(400).json({ success: false, message: `Line #${idx + 1}: Material issue line item was not found` });
+      }
+
+      const returnedQty = parseFloat(line.returnedQuantity);
+      if (isNaN(returnedQty) || returnedQty <= 0) {
+        return res.status(400).json({ success: false, message: `Line #${idx + 1} (${issueItem.materialName}): Return quantity must be greater than 0` });
+      }
+
+      // Calculate previously returned quantity
+      let prevReturned = 0;
+      for (const pRet of postedReturns) {
+        for (const pIt of pRet.items) {
+          if (pIt.materialIssueItemId === issueItem.id || pIt.materialId === issueItem.materialId) {
+            prevReturned += (pIt.returnedQuantity || 0);
+          }
+        }
+      }
+      prevReturned = round2(prevReturned);
+      const issuedQty = issueItem.actualIssuedQuantity || issueItem.quantityToIssue;
+      const maxReturnable = round2(Math.max(0, issuedQty - prevReturned));
+
+      if (returnedQty > maxReturnable) {
+        return res.status(400).json({
+          success: false,
+          message: `Line #${idx + 1} (${issueItem.materialName}): Return quantity (${returnedQty} ${issueItem.unitCode}) exceeds net issued quantity available to return (${maxReturnable} ${issueItem.unitCode}). Total Issued: ${issuedQty}, Previously Returned: ${prevReturned}.`,
+        });
+      }
+
+      const condition = line.condition || 'ReusableGood';
+      const disposition = line.disposition || (condition === 'ReusableGood' ? 'ReturnToUsableStock' : 'QuarantineScrap');
+      const unitCost = issueItem.unitCost || 0;
+
+      parsedItems.push({
+        id: `MRI-${Date.now().toString(36)}-${idx}-${crypto.randomBytes(2).toString('hex')}`,
+        materialReturnId: '',
+        materialIssueItemId: issueItem.id,
+        materialId: issueItem.materialId,
+        materialCode: issueItem.materialCode,
+        materialName: issueItem.materialName,
+        unitCode: issueItem.unitCode,
+        issuedQuantity: issuedQty,
+        previouslyReturnedQuantity: prevReturned,
+        maxReturnableQuantity: maxReturnable,
+        returnedQuantity: returnedQty,
+        condition,
+        disposition,
+        unitCost,
+        totalReturnAmount: round2(returnedQty * unitCost),
+        inspectionNotes: line.inspectionNotes || '',
+      });
+    }
+
+    const newReturnNumber = generateNextReturnNumber(returns);
+    const newReturnId = `RET-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`;
+    parsedItems.forEach((it) => (it.materialReturnId = newReturnId));
+
+    const newReturn: MaterialReturnRecord = {
+      id: newReturnId,
+      returnNumber: newReturnNumber,
+      materialIssueId: issue.id,
+      materialIssueNumber: issue.issueNumber,
+      requisitionId: issue.requisitionId,
+      requisitionNumber: issue.requisitionNumber,
+      projectId: issue.projectId,
+      projectName: issue.projectName,
+      warehouseId: issue.warehouseId,
+      warehouseName: issue.warehouseName,
+      returnDate: returnDate || nowUtc.split('T')[0],
+      returnedByPerson: String(returnedByPerson).trim(),
+      reason: String(reason).trim(),
+      status: 'Draft',
+      items: parsedItems,
+      auditTrail: [
+        {
+          id: `RA-${crypto.randomBytes(4).toString('hex')}`,
+          materialReturnId: newReturnId,
+          actorUserId: user.sub,
+          actorName: user.fullName,
+          actorRole: user.roles[0] || 'Storekeeper',
+          action: 'DraftCreated',
+          comments: `Material return note draft created against ${issue.issueNumber}. Reason: ${reason}`,
+          timestampUtc: nowUtc,
+        },
+      ],
+      remarks: remarks ? String(remarks).trim() : undefined,
+      createdByUserId: user.sub,
+      createdByName: user.fullName,
+      createdAtUtc: nowUtc,
+    };
+
+    returns.unshift(newReturn);
+    writeJsonAtomic(materialReturnsFile, returns);
+
+    return res.status(201).json({
+      success: true,
+      data: newReturn,
+      message: `Material return note ${newReturn.returnNumber} created.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // PUT /api/material-returns/:id (Update Return Draft)
+  router.put('/material-returns/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const user = req.user!;
+    const returnIndex = returns.findIndex((r) => r.id === req.params.id || r.returnNumber === req.params.id);
+
+    if (returnIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material return '${req.params.id}' was not found` });
+    }
+
+    const returnDoc = returns[returnIndex];
+
+    if (returnDoc.status === 'Posted') {
+      return res.status(405).json({
+        success: false,
+        message: 'Method Not Allowed: Posted material returns are permanently immutable and cannot be modified.',
+      });
+    }
+
+    const { returnedByPerson, reason, returnDate, remarks } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    if (returnedByPerson) returnDoc.returnedByPerson = String(returnedByPerson).trim();
+    if (reason) returnDoc.reason = String(reason).trim();
+    if (returnDate) returnDoc.returnDate = returnDate;
+    if (remarks !== undefined) returnDoc.remarks = String(remarks).trim();
+
+    returnDoc.auditTrail.push({
+      id: `RA-${crypto.randomBytes(4).toString('hex')}`,
+      materialReturnId: returnDoc.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Updated',
+      comments: 'Material return details updated.',
+      timestampUtc: nowUtc,
+    });
+
+    returnDoc.updatedAtUtc = nowUtc;
+    returns[returnIndex] = returnDoc;
+    writeJsonAtomic(materialReturnsFile, returns);
+
+    return res.status(200).json({ success: true, data: returnDoc, timestampUtc: nowUtc });
+  });
+
+  // POST /api/material-returns/:id/inspect (QA Inspection of Returned Material)
+  router.post('/material-returns/:id/inspect', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']), (req: AuthenticatedRequest, res: Response) => {
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const user = req.user!;
+    const returnIndex = returns.findIndex((r) => r.id === req.params.id || r.returnNumber === req.params.id);
+
+    if (returnIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material return '${req.params.id}' was not found` });
+    }
+
+    const returnDoc = returns[returnIndex];
+    const { items, comments } = req.body || {};
+
+    if (Array.isArray(items) && items.length > 0) {
+      for (const line of items) {
+        const item = returnDoc.items.find((it) => it.id === line.id || it.materialId === line.materialId);
+        if (item) {
+          if (line.condition) item.condition = line.condition;
+          if (line.disposition) item.disposition = line.disposition;
+          if (line.inspectionNotes !== undefined) item.inspectionNotes = String(line.inspectionNotes).trim();
+        }
+      }
+    }
+
+    const nowUtc = new Date().toISOString();
+    returnDoc.status = 'Inspected';
+    returnDoc.inspectedByUserId = user.sub;
+    returnDoc.inspectedByName = user.fullName;
+    returnDoc.inspectedAtUtc = nowUtc;
+
+    returnDoc.auditTrail.push({
+      id: `RA-${crypto.randomBytes(4).toString('hex')}`,
+      materialReturnId: returnDoc.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Inspected',
+      comments: comments ? String(comments).trim() : 'QA Inspection completed on returned material.',
+      timestampUtc: nowUtc,
+    });
+
+    returnDoc.updatedAtUtc = nowUtc;
+    returns[returnIndex] = returnDoc;
+    writeJsonAtomic(materialReturnsFile, returns);
+
+    return res.status(200).json({ success: true, data: returnDoc, message: `Material return ${returnDoc.returnNumber} inspected.` });
+  });
+
+  // POST /api/material-returns/:id/approve
+  router.post('/material-returns/:id/approve', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const user = req.user!;
+    const returnIndex = returns.findIndex((r) => r.id === req.params.id || r.returnNumber === req.params.id);
+
+    if (returnIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material return '${req.params.id}' was not found` });
+    }
+
+    const returnDoc = returns[returnIndex];
+    const { comments } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    returnDoc.status = 'Approved';
+    returnDoc.approvedByUserId = user.sub;
+    returnDoc.approvedByName = user.fullName;
+    returnDoc.approvedAtUtc = nowUtc;
+
+    returnDoc.auditTrail.push({
+      id: `RA-${crypto.randomBytes(4).toString('hex')}`,
+      materialReturnId: returnDoc.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'ProjectManager',
+      action: 'Approved',
+      comments: comments ? String(comments).trim() : 'Material return approved.',
+      timestampUtc: nowUtc,
+    });
+
+    returnDoc.updatedAtUtc = nowUtc;
+    returns[returnIndex] = returnDoc;
+    writeJsonAtomic(materialReturnsFile, returns);
+
+    return res.status(200).json({ success: true, data: returnDoc, message: `Material return ${returnDoc.returnNumber} approved.` });
+  });
+
+  // POST /api/material-returns/:id/post (Post Return to Stock Ledger)
+  router.post('/material-returns/:id/post', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']), (req: AuthenticatedRequest, res: Response) => {
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const inventoryBalances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, []);
+    const user = req.user!;
+    const nowUtc = new Date().toISOString();
+
+    const returnIndex = returns.findIndex((r) => r.id === req.params.id || r.returnNumber === req.params.id);
+
+    if (returnIndex === -1) {
+      return res.status(404).json({ success: false, message: `Material return '${req.params.id}' was not found` });
+    }
+
+    const returnDoc = returns[returnIndex];
+
+    if (returnDoc.status === 'Posted') {
+      return res.status(200).json({
+        success: true,
+        data: returnDoc,
+        message: `Material return ${returnDoc.returnNumber} was already posted previously.`,
+        timestampUtc: nowUtc,
+      });
+    }
+
+    if (returnDoc.status !== 'Approved' && returnDoc.status !== 'Inspected') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot post material return '${returnDoc.returnNumber}'. Status is '${returnDoc.status}', but must be 'Approved' or 'Inspected'.`,
+      });
+    }
+
+    const result = postMaterialReturnToStockLedger(returnDoc, user, nowUtc, stockLedger, inventoryBalances, issues, materials);
+
+    returnDoc.status = 'Posted';
+    returnDoc.postedByUserId = user.sub;
+    returnDoc.postedByName = user.fullName;
+    returnDoc.postedAtUtc = nowUtc;
+
+    returnDoc.auditTrail.push({
+      id: `RA-${crypto.randomBytes(4).toString('hex')}`,
+      materialReturnId: returnDoc.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Posted',
+      comments: `Material return posted to stock ledger. ${result.postedCount} reusable lines restored to inventory balances.`,
+      timestampUtc: nowUtc,
+    });
+
+    returnDoc.updatedAtUtc = nowUtc;
+    returns[returnIndex] = returnDoc;
+
+    writeJsonAtomic(materialReturnsFile, returns);
+    writeJsonAtomic(materialIssuesFile, issues);
+    writeJsonAtomic(stockLedgerFile, stockLedger);
+    writeJsonAtomic(inventoryBalancesFile, inventoryBalances);
+
+    return res.status(200).json({
+      success: true,
+      data: returnDoc,
+      message: `Material return ${returnDoc.returnNumber} posted successfully. Reusable stock restored.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // GET /api/material-returns/:id/history
+  router.get('/material-returns/:id/history', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const returnDoc = returns.find((r) => r.id === req.params.id || r.returnNumber === req.params.id);
+
+    if (!returnDoc) {
+      return res.status(404).json({ success: false, message: `Material return '${req.params.id}' was not found` });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: returnDoc.auditTrail || [],
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/requisitions/:id/fulfillment (Comprehensive Requisition Fulfillment Details)
+  router.get('/requisitions/:id/fulfillment', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const user = req.user!;
+
+    const reqDoc = requisitions.find((r) => r.id === req.params.id || r.requisitionNumber === req.params.id);
+
+    if (!reqDoc) {
+      return res.status(404).json({ success: false, message: `Requisition '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessProject(user, reqDoc.projectId)) {
+      return res.status(403).json({ success: false, message: `Forbidden: You do not have permission for project '${reqDoc.projectName}'` });
+    }
+
+    const linkedIssues = issues.filter((i) => i.requisitionId === reqDoc.id || i.requisitionNumber === reqDoc.requisitionNumber);
+    const postedIssues = linkedIssues.filter((i) => i.status === 'Posted');
+
+    const issueIds = new Set(linkedIssues.map((i) => i.id));
+    const linkedReturns = returns.filter((r) => issueIds.has(r.materialIssueId));
+    const postedReturns = linkedReturns.filter((r) => r.status === 'Posted');
+
+    // Build line item breakdown
+    const lineBreakdown = reqDoc.items.map((ri) => {
+      let issuedQty = 0;
+      for (const pIss of postedIssues) {
+        for (const pIt of pIss.items) {
+          if (pIt.requisitionItemId === ri.id || pIt.materialId === ri.materialId) {
+            issuedQty += (pIt.actualIssuedQuantity || pIt.quantityToIssue || 0);
+          }
+        }
+      }
+      issuedQty = round2(issuedQty);
+
+      let returnedQty = 0;
+      for (const pRet of postedReturns) {
+        for (const pIt of pRet.items) {
+          if (pIt.materialId === ri.materialId) {
+            returnedQty += (pIt.returnedQuantity || 0);
+          }
+        }
+      }
+      returnedQty = round2(returnedQty);
+
+      const netIssued = round2(Math.max(0, issuedQty - returnedQty));
+      const outstandingQty = round2(Math.max(0, ri.requestedQuantity - issuedQty));
+
+      return {
+        requisitionItemId: ri.id,
+        materialId: ri.materialId,
+        materialCode: ri.materialCode,
+        materialName: ri.materialName,
+        unitCode: ri.unitCode,
+        requestedQuantity: ri.requestedQuantity,
+        issuedQuantity: issuedQty,
+        returnedQuantity: returnedQty,
+        netIssuedQuantity: netIssued,
+        outstandingQuantity: outstandingQty,
+        fulfillmentPercent: ri.requestedQuantity > 0 ? round2((issuedQty / ri.requestedQuantity) * 100) : 0,
+      };
+    });
+
+    const totalRequested = round2(lineBreakdown.reduce((sum, l) => sum + l.requestedQuantity, 0));
+    const totalIssued = round2(lineBreakdown.reduce((sum, l) => sum + l.issuedQuantity, 0));
+    const totalReturned = round2(lineBreakdown.reduce((sum, l) => sum + l.returnedQuantity, 0));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        requisition: reqDoc,
+        lineBreakdown,
+        summary: {
+          totalRequested,
+          totalIssued,
+          totalReturned,
+          netConsumed: round2(totalIssued - totalReturned),
+          totalOutstanding: round2(Math.max(0, totalRequested - (totalIssued - totalReturned))),
+          overallFulfillmentPercent: totalRequested > 0 ? round2((totalIssued / totalRequested) * 100) : 0,
+          issueDocumentCount: linkedIssues.length,
+          returnDocumentCount: linkedReturns.length,
+        },
+        linkedIssues,
+        linkedReturns,
+        linkedVouchers: {
+          issues: linkedIssues,
+          returns: linkedReturns,
+        },
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // ========================================================================
+  // API: STOCK TRANSFERS & IN-TRANSIT INVENTORY
+  // ========================================================================
+
+  function generateNextTransferNumber(transfers: StockTransferRecord[]): string {
+    const currentYear = new Date().getFullYear();
+    const yearPrefix = `STN-${currentYear}-`;
+    const matching = transfers
+      .map((t) => t.transferNumber)
+      .filter((num) => num && num.startsWith(yearPrefix));
+
+    if (matching.length === 0) {
+      return `${yearPrefix}0001`;
+    }
+
+    let maxSeq = 0;
+    for (const num of matching) {
+      const parts = num.split('-');
+      if (parts.length === 3) {
+        const seq = parseInt(parts[2], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+
+    return `${yearPrefix}${(maxSeq + 1).toString().padStart(4, '0')}`;
+  }
+
+  function postStockTransferDispatchToLedger(
+    transfer: StockTransferRecord,
+    user: JwtPayload,
+    nowUtc: string,
+    stockLedger: StockLedgerRecord[],
+    inventoryBalances: InventoryBalanceRecord[],
+    materials: MaterialRecord[]
+  ) {
+    let dispatchedCount = 0;
+
+    for (let idx = 0; idx < transfer.items.length; idx++) {
+      const item = transfer.items[idx];
+      const dispatchedQty = item.dispatchedQuantity || item.approvedQuantity || item.requestedQuantity || 0;
+
+      if (dispatchedQty <= 0) continue;
+
+      // 1. Check Source Balance
+      let sourceBal = inventoryBalances.find(
+        (b) =>
+          (b.materialId === item.materialId || b.materialCode === item.materialCode) &&
+          b.warehouseId === transfer.sourceWarehouseId &&
+          b.projectId === transfer.sourceProjectId
+      );
+
+      if (!sourceBal) {
+        sourceBal = inventoryBalances.find(
+          (b) =>
+            (b.materialId === item.materialId || b.materialCode === item.materialCode) &&
+            b.warehouseId === transfer.sourceWarehouseId
+        );
+      }
+
+      const available = sourceBal ? sourceBal.quantityOnHand : 0;
+      if (!sourceBal || available < dispatchedQty) {
+        throw new Error(
+          `Insufficient available stock at source location '${transfer.sourceWarehouseName}'. Required: ${dispatchedQty} ${item.unitCode}, Available: ${available} ${item.unitCode} for '${item.materialName}'.`
+        );
+      }
+
+      const unitCost = sourceBal.weightedAverageCost || 0;
+      const totalAmount = round2(dispatchedQty * unitCost);
+
+      // 2. Outbound Stock Ledger Entry
+      const idempotencyKey = `STF_DISPATCH_${transfer.id}_ITEM_${item.id}`;
+      if (!stockLedger.some((e) => e.idempotencyKey === idempotencyKey)) {
+        const entryId = `STK-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+        const refNum = `STK-${new Date().getFullYear()}-${(stockLedger.length + 1).toString().padStart(4, '0')}`;
+
+        const newBalQty = round2(sourceBal.quantityOnHand - dispatchedQty);
+        const newTotalVal = round2(newBalQty * unitCost);
+
+        const ledgerEntry: StockLedgerRecord = {
+          id: entryId,
+          referenceNumber: refNum,
+          transactionType: 'TransferOut',
+          sourceDocumentType: 'StockTransferNote',
+          sourceDocumentId: transfer.id,
+          sourceDocumentNumber: transfer.transferNumber,
+          sourceLineId: item.id,
+          materialId: item.materialId,
+          materialCode: item.materialCode,
+          materialName: item.materialName,
+          unitCode: item.unitCode,
+          warehouseId: transfer.sourceWarehouseId,
+          warehouseName: transfer.sourceWarehouseName,
+          projectId: transfer.sourceProjectId,
+          projectName: transfer.sourceProjectName,
+          quantityIn: 0,
+          quantityOut: dispatchedQty,
+          signedQuantity: -dispatchedQty,
+          unitCost,
+          transactionValue: totalAmount,
+          balanceQuantityAfter: newBalQty,
+          weightedAverageCostAfter: unitCost,
+          totalValuationAfter: newTotalVal,
+          idempotencyKey,
+          transactionDate: nowUtc.split('T')[0],
+          timestampUtc: nowUtc,
+          createdByUserId: user.sub,
+          createdByName: user.fullName,
+          remarks: `Stock Transfer dispatch to ${transfer.destinationWarehouseName} / ${transfer.destinationProjectName}`,
+        };
+
+        stockLedger.unshift(ledgerEntry);
+        item.sourceStockLedgerEntryId = entryId;
+
+        // Reduce Source Location Balance
+        sourceBal.quantityOnHand = newBalQty;
+        sourceBal.inventoryValue = newTotalVal;
+        sourceBal.lastUpdatedUtc = nowUtc;
+        sourceBal.version = (sourceBal.version || 1) + 1;
+      }
+
+      // 3. Track In-Transit Quantity at Destination Location Balance
+      let destBal = inventoryBalances.find(
+        (b) =>
+          (b.materialId === item.materialId || b.materialCode === item.materialCode) &&
+          b.warehouseId === transfer.destinationWarehouseId &&
+          b.projectId === transfer.destinationProjectId
+      );
+
+      if (!destBal) {
+        destBal = {
+          id: `BAL-DST-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`,
+          materialId: item.materialId,
+          materialCode: item.materialCode,
+          materialName: item.materialName,
+          unitCode: item.unitCode,
+          warehouseId: transfer.destinationWarehouseId,
+          warehouseName: transfer.destinationWarehouseName,
+          projectId: transfer.destinationProjectId,
+          projectName: transfer.destinationProjectName,
+          quantityOnHand: 0,
+          quantityReserved: 0,
+          quantityAvailable: 0,
+          quantityInTransit: 0,
+          weightedAverageCost: unitCost,
+          inventoryValue: 0,
+          version: 1,
+          lastUpdatedUtc: nowUtc,
+        };
+        inventoryBalances.push(destBal);
+      }
+
+      destBal.quantityInTransit = round2((destBal.quantityInTransit || 0) + dispatchedQty);
+      destBal.lastUpdatedUtc = nowUtc;
+
+      item.unitCostAtDispatch = unitCost;
+      item.totalDispatchedAmount = totalAmount;
+      item.dispatchedQuantity = dispatchedQty;
+      item.remainingInTransitQuantity = dispatchedQty;
+
+      dispatchedCount++;
+    }
+
+    return { dispatchedCount };
+  }
+
+  function postStockTransferReceiptToLedger(
+    transfer: StockTransferRecord,
+    user: JwtPayload,
+    nowUtc: string,
+    stockLedger: StockLedgerRecord[],
+    inventoryBalances: InventoryBalanceRecord[],
+    materials: MaterialRecord[]
+  ) {
+    let receivedCount = 0;
+
+    for (let idx = 0; idx < transfer.items.length; idx++) {
+      const item = transfer.items[idx];
+      const goodQty = item.receivedGoodQuantity || 0;
+      const damagedQty = item.damagedQuantity || 0;
+      const shortQty = item.shortQuantity || 0;
+      const disputedQty = item.disputedQuantity || 0;
+      const totalAccounted = round2(goodQty + damagedQty + shortQty + disputedQty);
+
+      if (totalAccounted <= 0) continue;
+
+      const unitCost = item.unitCostAtDispatch || 0;
+
+      // Destination Balance
+      let destBal = inventoryBalances.find(
+        (b) =>
+          (b.materialId === item.materialId || b.materialCode === item.materialCode) &&
+          b.warehouseId === transfer.destinationWarehouseId &&
+          b.projectId === transfer.destinationProjectId
+      );
+
+      if (!destBal) {
+        destBal = {
+          id: `BAL-DST-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`,
+          materialId: item.materialId,
+          materialCode: item.materialCode,
+          materialName: item.materialName,
+          unitCode: item.unitCode,
+          warehouseId: transfer.destinationWarehouseId,
+          warehouseName: transfer.destinationWarehouseName,
+          projectId: transfer.destinationProjectId,
+          projectName: transfer.destinationProjectName,
+          quantityOnHand: 0,
+          quantityReserved: 0,
+          quantityAvailable: 0,
+          quantityInTransit: 0,
+          weightedAverageCost: unitCost,
+          inventoryValue: 0,
+          version: 1,
+          lastUpdatedUtc: nowUtc,
+        };
+        inventoryBalances.push(destBal);
+      }
+
+      // 1. Post Inbound Good Quantity to Stock Ledger
+      if (goodQty > 0) {
+        const idempotencyKey = `STF_RECEIPT_${transfer.id}_ITEM_${item.id}_${goodQty}`;
+        if (!stockLedger.some((e) => e.idempotencyKey === idempotencyKey)) {
+          const entryId = `STK-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+          const refNum = `STK-${new Date().getFullYear()}-${(stockLedger.length + 1).toString().padStart(4, '0')}`;
+
+          const oldOnHand = destBal.quantityOnHand || 0;
+          const oldValuation = destBal.inventoryValue || 0;
+          const incomingValue = round2(goodQty * unitCost);
+
+          const newOnHand = round2(oldOnHand + goodQty);
+          const newValuation = round2(oldValuation + incomingValue);
+          const newWac = newOnHand > 0 ? round4(newValuation / newOnHand) : unitCost;
+
+          const ledgerEntry: StockLedgerRecord = {
+            id: entryId,
+            referenceNumber: refNum,
+            transactionType: 'TransferIn',
+            sourceDocumentType: 'StockTransferNote',
+            sourceDocumentId: transfer.id,
+            sourceDocumentNumber: transfer.transferNumber,
+            sourceLineId: item.id,
+            materialId: item.materialId,
+            materialCode: item.materialCode,
+            materialName: item.materialName,
+            unitCode: item.unitCode,
+            warehouseId: transfer.destinationWarehouseId,
+            warehouseName: transfer.destinationWarehouseName,
+            projectId: transfer.destinationProjectId,
+            projectName: transfer.destinationProjectName,
+            quantityIn: goodQty,
+            quantityOut: 0,
+            signedQuantity: goodQty,
+            unitCost,
+            transactionValue: incomingValue,
+            balanceQuantityAfter: newOnHand,
+            weightedAverageCostAfter: newWac,
+            totalValuationAfter: newValuation,
+            idempotencyKey,
+            transactionDate: nowUtc.split('T')[0],
+            timestampUtc: nowUtc,
+            createdByUserId: user.sub,
+            createdByName: user.fullName,
+            remarks: `Stock Transfer receipt from ${transfer.sourceWarehouseName} / ${transfer.sourceProjectName}`,
+          };
+
+          stockLedger.unshift(ledgerEntry);
+          item.destinationStockLedgerEntryId = entryId;
+
+          // Update destination stock on hand
+          destBal.quantityOnHand = newOnHand;
+          destBal.weightedAverageCost = newWac;
+          destBal.inventoryValue = newValuation;
+        }
+      }
+
+      // 2. Reduce In-Transit Quantity by total accounted
+      destBal.quantityInTransit = Math.max(0, round2((destBal.quantityInTransit || 0) - totalAccounted));
+      destBal.lastUpdatedUtc = nowUtc;
+      destBal.version = (destBal.version || 1) + 1;
+
+      // Update remaining in-transit quantity on transfer item
+      item.remainingInTransitQuantity = Math.max(
+        0,
+        round2(item.dispatchedQuantity - (goodQty + damagedQty + shortQty + disputedQty))
+      );
+
+      receivedCount++;
+    }
+
+    return { receivedCount };
+  }
+
+  // GET /api/stock-transfers (Paginated, Filtered & Scoped List)
+  router.get('/stock-transfers', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const { search, status, sourceWarehouseId, destinationWarehouseId, projectId, page, pageSize } = req.query;
+
+    let filtered = transfers.filter(
+      (t) =>
+        canUserAccessLocation(user, t.sourceProjectId, t.sourceWarehouseId) ||
+        canUserAccessLocation(user, t.destinationProjectId, t.destinationWarehouseId)
+    );
+
+    if (search && typeof search === 'string') {
+      const term = search.trim().toUpperCase();
+      filtered = filtered.filter(
+        (t) =>
+          t.transferNumber.toUpperCase().includes(term) ||
+          t.sourceWarehouseName.toUpperCase().includes(term) ||
+          t.destinationWarehouseName.toUpperCase().includes(term) ||
+          t.purpose.toUpperCase().includes(term) ||
+          t.items.some((it) => it.materialCode.toUpperCase().includes(term) || it.materialName.toUpperCase().includes(term))
+      );
+    }
+
+    if (status && typeof status === 'string' && status !== 'ALL') {
+      filtered = filtered.filter((t) => t.status === status);
+    }
+
+    if (sourceWarehouseId && typeof sourceWarehouseId === 'string' && sourceWarehouseId !== 'ALL') {
+      filtered = filtered.filter((t) => t.sourceWarehouseId === sourceWarehouseId);
+    }
+
+    if (destinationWarehouseId && typeof destinationWarehouseId === 'string' && destinationWarehouseId !== 'ALL') {
+      filtered = filtered.filter((t) => t.destinationWarehouseId === destinationWarehouseId);
+    }
+
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      filtered = filtered.filter((t) => t.sourceProjectId === projectId || t.destinationProjectId === projectId);
+    }
+
+    filtered.sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
+
+    if (page && pageSize) {
+      const pageIndex = Math.max(1, parseInt(page as string, 10) || 1);
+      const size = Math.max(1, parseInt(pageSize as string, 10) || 20);
+      const totalCount = filtered.length;
+      const totalPages = Math.ceil(totalCount / size);
+      const paged = filtered.slice((pageIndex - 1) * size, pageIndex * size);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          items: paged,
+          pageIndex,
+          pageSize: size,
+          totalCount,
+          totalPages,
+        },
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: filtered,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/stock-transfers/discrepancies (Scoped Unresolved Discrepancy Queue)
+  router.get('/stock-transfers/discrepancies', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+
+    const accessible = transfers.filter(
+      (t) =>
+        canUserAccessLocation(user, t.sourceProjectId, t.sourceWarehouseId) ||
+        canUserAccessLocation(user, t.destinationProjectId, t.destinationWarehouseId)
+    );
+
+    const discrepancies: any[] = [];
+
+    for (const t of accessible) {
+      for (const item of t.items) {
+        const hasDamage = (item.damagedQuantity || 0) > 0;
+        const hasShortage = (item.shortQuantity || 0) > 0;
+        const hasDispute = (item.disputedQuantity || 0) > 0;
+        const isPending = item.resolutionStatus === 'Pending' || t.discrepancyStatus === 'PendingReview';
+
+        if ((hasDamage || hasShortage || hasDispute || item.discrepancyReason) && isPending) {
+          discrepancies.push({
+            id: `DISC-STF-${item.id}`,
+            stockTransferId: t.id,
+            transferNumber: t.transferNumber,
+            materialId: item.materialId,
+            materialCode: item.materialCode,
+            materialName: item.materialName,
+            unitCode: item.unitCode,
+            sourceLocation: `${t.sourceWarehouseName} (${t.sourceProjectName})`,
+            destinationLocation: `${t.destinationWarehouseName} (${t.destinationProjectName})`,
+            dispatchedQuantity: item.dispatchedQuantity,
+            receivedGoodQuantity: item.receivedGoodQuantity,
+            damagedQuantity: item.damagedQuantity,
+            shortQuantity: item.shortQuantity,
+            disputedQuantity: item.disputedQuantity,
+            discrepancyReason: item.discrepancyReason || 'Quantity discrepancy reported upon site receipt inspection',
+            inspectionNotes: item.inspectionNotes || '',
+            resolutionStatus: item.resolutionStatus || 'Pending',
+            reportedBy: t.receivedByUserId ? 'Receiving Storekeeper' : 'Inspector',
+            reportedAtUtc: t.actualReceiptDate || t.updatedAtUtc || t.createdAtUtc,
+          });
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: discrepancies,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/inventory/in-transit (Scoped In-Transit Quantity & Transfers Summary)
+  router.get('/inventory/in-transit', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+
+    const inTransitTransfers = transfers.filter(
+      (t) =>
+        (t.status === 'Dispatched' || t.status === 'PartiallyReceived') &&
+        (canUserAccessLocation(user, t.sourceProjectId, t.sourceWarehouseId) ||
+          canUserAccessLocation(user, t.destinationProjectId, t.destinationWarehouseId))
+    );
+
+    const itemsSummary: any[] = [];
+
+    for (const t of inTransitTransfers) {
+      for (const item of t.items) {
+        if ((item.remainingInTransitQuantity || item.dispatchedQuantity) > 0) {
+          itemsSummary.push({
+            stockTransferId: t.id,
+            transferNumber: t.transferNumber,
+            materialId: item.materialId,
+            materialCode: item.materialCode,
+            materialName: item.materialName,
+            unitCode: item.unitCode,
+            sourceWarehouseId: t.sourceWarehouseId,
+            sourceWarehouseName: t.sourceWarehouseName,
+            destinationWarehouseId: t.destinationWarehouseId,
+            destinationWarehouseName: t.destinationWarehouseName,
+            sourceProjectId: t.sourceProjectId,
+            sourceProjectName: t.sourceProjectName,
+            destinationProjectId: t.destinationProjectId,
+            destinationProjectName: t.destinationProjectName,
+            dispatchedQuantity: item.dispatchedQuantity,
+            receivedGoodQuantity: item.receivedGoodQuantity,
+            remainingInTransitQuantity: item.remainingInTransitQuantity || item.dispatchedQuantity,
+            unitCostAtDispatch: item.unitCostAtDispatch,
+            totalInTransitValue: round2((item.remainingInTransitQuantity || item.dispatchedQuantity) * item.unitCostAtDispatch),
+            actualDispatchDate: t.actualDispatchDate,
+            expectedArrivalDate: t.expectedArrivalDate,
+            status: t.status,
+          });
+        }
+      }
+    }
+
+    const totalValue = round2(itemsSummary.reduce((sum, i) => sum + i.totalInTransitValue, 0));
+    const totalQuantity = round2(itemsSummary.reduce((sum, i) => sum + i.remainingInTransitQuantity, 0));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: itemsSummary,
+        transfers: inTransitTransfers,
+        metrics: {
+          activeTransferCount: inTransitTransfers.length,
+          totalInTransitQuantity: totalQuantity,
+          totalInTransitValue: totalValue,
+        },
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/stock-transfers/:id
+  router.get('/stock-transfers/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const transfer = transfers.find((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (!transfer) {
+      return res.status(404).json({
+        success: false,
+        message: `Stock transfer '${req.params.id}' was not found`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    if (
+      !canUserAccessLocation(user, transfer.sourceProjectId, transfer.sourceWarehouseId) &&
+      !canUserAccessLocation(user, transfer.destinationProjectId, transfer.destinationWarehouseId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have access permission to view transfers for these locations',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: transfer,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/stock-transfers/:id/history
+  router.get('/stock-transfers/:id/history', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const transfer = transfers.find((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (!transfer) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: transfer.auditTrail || [],
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/stock-transfers/:id/reconciliation
+  router.get('/stock-transfers/:id/reconciliation', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const transfer = transfers.find((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (!transfer) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const lines = transfer.items.map((it) => {
+      const dispatched = it.dispatchedQuantity || 0;
+      const good = it.receivedGoodQuantity || 0;
+      const damaged = it.damagedQuantity || 0;
+      const short = it.shortQuantity || 0;
+      const disputed = it.disputedQuantity || 0;
+      const inTransit = it.remainingInTransitQuantity || 0;
+
+      const totalAccounted = round2(good + damaged + short + disputed + inTransit);
+      const isReconciled = Math.abs(dispatched - totalAccounted) < 0.001;
+
+      return {
+        lineId: it.id,
+        materialCode: it.materialCode,
+        materialName: it.materialName,
+        unitCode: it.unitCode,
+        dispatchedQuantity: dispatched,
+        receivedGoodQuantity: good,
+        damagedQuantity: damaged,
+        shortQuantity: short,
+        disputedQuantity: disputed,
+        remainingInTransitQuantity: inTransit,
+        totalAccounted,
+        isReconciled,
+        variance: round2(dispatched - totalAccounted),
+      };
+    });
+
+    const isFullyReconciled = lines.every((l) => l.isReconciled);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        transferId: transfer.id,
+        transferNumber: transfer.transferNumber,
+        status: transfer.status,
+        isFullyReconciled,
+        lines,
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // POST /api/stock-transfers (Create Draft Transfer Request)
+  router.post('/stock-transfers', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const {
+      sourceWarehouseId,
+      sourceProjectId = 'PRJ-101',
+      destinationWarehouseId,
+      destinationProjectId = 'PRJ-101',
+      purpose,
+      transferReason,
+      priority = 'Medium',
+      requestDate,
+      items,
+      remarks,
+      submitImmediately,
+    } = req.body || {};
+
+    const user = req.user!;
+    const nowUtc = new Date().toISOString();
+
+    if (!sourceWarehouseId || !destinationWarehouseId) {
+      return res.status(400).json({ success: false, message: 'Both Source and Destination warehouse/store locations are required.' });
+    }
+
+    // Business Rule: Source and Destination stock locations MUST BE DIFFERENT
+    if (sourceWarehouseId === destinationWarehouseId && sourceProjectId === destinationProjectId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Location Transfer: Source and Destination stock locations cannot be identical.',
+      });
+    }
+
+    // Access Check: User must hold access permission for both source and destination
+    if (!canUserAccessLocation(user, sourceProjectId, sourceWarehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: You do not have authorization scope for source location '${sourceWarehouseId}'.`,
+      });
+    }
+
+    if (!canUserAccessLocation(user, destinationProjectId, destinationWarehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: You do not have authorization scope for destination location '${destinationWarehouseId}'.`,
+      });
+    }
+
+    if (!purpose || !String(purpose).trim()) {
+      return res.status(400).json({ success: false, message: 'Stock transfer purpose / site justification is required.' });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Stock transfer request must contain at least one line item.' });
+    }
+
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+    const parsedItems: StockTransferItemRecord[] = [];
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const line = items[idx];
+      if (!line.materialId) {
+        return res.status(400).json({ success: false, message: `Line #${idx + 1}: Material selection is required.` });
+      }
+
+      const mat = materials.find((m) => m.id === line.materialId || m.itemCode === line.materialId);
+      if (!mat) {
+        return res.status(400).json({ success: false, message: `Line #${idx + 1}: Material '${line.materialId}' was not found in Material Master.` });
+      }
+
+      const reqQty = parseFloat(line.requestedQuantity);
+      if (isNaN(reqQty) || reqQty <= 0) {
+        return res.status(400).json({ success: false, message: `Line #${idx + 1} (${mat.name}): Requested transfer quantity must be greater than 0.` });
+      }
+
+      parsedItems.push({
+        id: `STI-${Date.now().toString(36)}-${idx}-${crypto.randomBytes(2).toString('hex')}`,
+        stockTransferId: '',
+        materialId: mat.id,
+        materialCode: mat.itemCode,
+        materialName: mat.name,
+        unitCode: mat.baseUnitName || 'Unit',
+        requestedQuantity: reqQty,
+        approvedQuantity: reqQty,
+        dispatchedQuantity: 0,
+        receivedGoodQuantity: 0,
+        damagedQuantity: 0,
+        shortQuantity: 0,
+        disputedQuantity: 0,
+        remainingInTransitQuantity: 0,
+        unitCostAtDispatch: 0,
+        totalDispatchedAmount: 0,
+      });
+    }
+
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const transferNumber = generateNextTransferNumber(transfers);
+    const transferId = `STF-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`;
+
+    parsedItems.forEach((it) => (it.stockTransferId = transferId));
+
+    const sourceWarehouseName = sourceWarehouseId === 'WH-01' ? 'Metro Central Staging Yard' : sourceWarehouseId === 'WH-02' ? 'North Industrial Depot & Yard' : 'East Harbor Hub';
+    const destWarehouseName = destinationWarehouseId === 'WH-01' ? 'Metro Central Staging Yard' : destinationWarehouseId === 'WH-02' ? 'North Industrial Depot & Yard' : 'East Harbor Hub';
+
+    const sourceProjectName = sourceProjectId === 'PRJ-102' ? 'Harbor Commercial Docklands' : sourceProjectId === 'PRJ-103' ? 'Skyline Corporate Towers' : 'Metro Rail Line 3 Extension';
+    const destProjectName = destinationProjectId === 'PRJ-102' ? 'Harbor Commercial Docklands' : destinationProjectId === 'PRJ-103' ? 'Skyline Corporate Towers' : 'Metro Rail Line 3 Extension';
+
+    const initialStatus: TransferStatus = submitImmediately ? 'Submitted' : 'Draft';
+
+    const auditTrail: StockTransferAuditRecord[] = [
+      {
+        id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+        stockTransferId: transferId,
+        actorUserId: user.sub,
+        actorName: user.fullName,
+        actorRole: user.roles[0] || 'Storekeeper',
+        action: 'DraftCreated',
+        comments: `Stock transfer request draft created from ${sourceWarehouseName} to ${destWarehouseName}. Purpose: ${purpose}`,
+        timestampUtc: nowUtc,
+      },
+    ];
+
+    if (submitImmediately) {
+      auditTrail.push({
+        id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+        stockTransferId: transferId,
+        actorUserId: user.sub,
+        actorName: user.fullName,
+        actorRole: user.roles[0] || 'Storekeeper',
+        action: 'Submitted',
+        comments: 'Submitted for managerial transfer approval.',
+        timestampUtc: nowUtc,
+      });
+    }
+
+    const newTransfer: StockTransferRecord = {
+      id: transferId,
+      transferNumber,
+      sourceWarehouseId,
+      sourceWarehouseName,
+      sourceProjectId,
+      sourceProjectName,
+      destinationWarehouseId,
+      destinationWarehouseName: destWarehouseName,
+      destinationProjectId,
+      destinationProjectName: destProjectName,
+      requestDate: requestDate || nowUtc.split('T')[0],
+      purpose: String(purpose).trim(),
+      transferReason: transferReason ? String(transferReason).trim() : undefined,
+      priority: ['Low', 'Medium', 'High', 'Urgent'].includes(priority) ? priority : 'Medium',
+      status: initialStatus,
+      discrepancyStatus: 'None',
+      items: parsedItems,
+      auditTrail,
+      remarks: remarks ? String(remarks).trim() : undefined,
+      createdByUserId: user.sub,
+      createdByName: user.fullName,
+      createdAtUtc: nowUtc,
+      submittedByUserId: submitImmediately ? user.sub : undefined,
+      submittedByName: submitImmediately ? user.fullName : undefined,
+      submittedAtUtc: submitImmediately ? nowUtc : undefined,
+    };
+
+    transfers.unshift(newTransfer);
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(201).json({
+      success: true,
+      data: newTransfer,
+      message: `Stock transfer request ${newTransfer.transferNumber} created successfully.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // PUT /api/stock-transfers/:id (Update Draft Transfer Request)
+  router.put('/stock-transfers/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+
+    // Immutability Check: Ordinary edits blocked if dispatched or received
+    if (['Dispatched', 'PartiallyReceived', 'Received', 'Completed'].includes(transfer.status)) {
+      return res.status(405).json({
+        success: false,
+        message: 'Method Not Allowed: Dispatched or completed stock transfers are permanently immutable and cannot be updated.',
+      });
+    }
+
+    if (transfer.status !== 'Draft' && transfer.status !== 'ReturnedForCorrection') {
+      return res.status(400).json({ success: false, message: `Cannot edit transfer in status '${transfer.status}'. Only Draft or ReturnedForCorrection can be edited.` });
+    }
+
+    const { purpose, transferReason, priority, items, remarks } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    if (purpose) transfer.purpose = String(purpose).trim();
+    if (transferReason !== undefined) transfer.transferReason = String(transferReason).trim();
+    if (priority && ['Low', 'Medium', 'High', 'Urgent'].includes(priority)) transfer.priority = priority;
+    if (remarks !== undefined) transfer.remarks = String(remarks).trim();
+
+    if (Array.isArray(items) && items.length > 0) {
+      for (const line of items) {
+        const existing = transfer.items.find((it) => it.id === line.id || it.materialId === line.materialId);
+        if (existing) {
+          const qty = parseFloat(line.requestedQuantity);
+          if (!isNaN(qty) && qty > 0) {
+            existing.requestedQuantity = qty;
+            existing.approvedQuantity = qty;
+          }
+        }
+      }
+    }
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Updated',
+      comments: 'Stock transfer request details updated.',
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(200).json({ success: true, data: transfer, message: `Stock transfer ${transfer.transferNumber} updated.` });
+  });
+
+  // POST /api/stock-transfers/:id/submit
+  router.post('/stock-transfers/:id/submit', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+    if (transfer.status !== 'Draft' && transfer.status !== 'ReturnedForCorrection') {
+      return res.status(400).json({ success: false, message: `Cannot submit transfer in '${transfer.status}' status.` });
+    }
+
+    const nowUtc = new Date().toISOString();
+    transfer.status = 'Submitted';
+    transfer.submittedByUserId = user.sub;
+    transfer.submittedByName = user.fullName;
+    transfer.submittedAtUtc = nowUtc;
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Submitted',
+      comments: 'Submitted for transfer authorization.',
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(200).json({ success: true, data: transfer, message: `Stock transfer ${transfer.transferNumber} submitted for approval.` });
+  });
+
+  // POST /api/stock-transfers/:id/approve (Supervisory Dual-Control Transfer Approval)
+  router.post('/stock-transfers/:id/approve', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+
+    // Dual-control policy: Requesting creator cannot self-approve
+    if (transfer.createdByUserId === user.sub && !user.roles.includes('SuperAdmin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Dual-control policy violation: You cannot approve a stock transfer request that you created yourself.',
+      });
+    }
+
+    if (transfer.status !== 'Submitted') {
+      return res.status(400).json({ success: false, message: `Cannot approve transfer in '${transfer.status}' status. Must be 'Submitted'.` });
+    }
+
+    const { items, comments } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    if (Array.isArray(items) && items.length > 0) {
+      for (const line of items) {
+        const item = transfer.items.find((it) => it.id === line.id || it.materialId === line.materialId);
+        if (item) {
+          const appQty = parseFloat(line.approvedQuantity);
+          if (!isNaN(appQty) && appQty >= 0) {
+            item.approvedQuantity = appQty;
+          }
+        }
+      }
+    }
+
+    transfer.status = 'Approved';
+    transfer.approvedByUserId = user.sub;
+    transfer.approvedByName = user.fullName;
+    transfer.approvedAtUtc = nowUtc;
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'ProjectManager',
+      action: 'Approved',
+      comments: comments ? String(comments).trim() : 'Stock transfer approved for dispatch.',
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(200).json({ success: true, data: transfer, message: `Stock transfer ${transfer.transferNumber} approved.` });
+  });
+
+  // POST /api/stock-transfers/:id/reject
+  router.post('/stock-transfers/:id/reject', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+    const { rejectionReason, comments } = req.body || {};
+    const reason = rejectionReason || comments;
+
+    if (!reason || String(reason).trim().length < 5) {
+      return res.status(400).json({ success: false, message: 'Rejection reason is required (minimum 5 characters).' });
+    }
+
+    const nowUtc = new Date().toISOString();
+    transfer.status = 'Rejected';
+    transfer.rejectionReason = String(reason).trim();
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'ProjectManager',
+      action: 'Rejected',
+      comments: String(reason).trim(),
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(200).json({ success: true, data: transfer, message: `Stock transfer ${transfer.transferNumber} rejected.` });
+  });
+
+  // POST /api/stock-transfers/:id/return-for-correction
+  router.post('/stock-transfers/:id/return-for-correction', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+    const { correctionNotes, comments } = req.body || {};
+    const notes = correctionNotes || comments;
+
+    if (!notes || String(notes).trim().length < 5) {
+      return res.status(400).json({ success: false, message: 'Correction notes are required (minimum 5 characters).' });
+    }
+
+    const nowUtc = new Date().toISOString();
+    transfer.status = 'ReturnedForCorrection';
+    transfer.correctionNotes = String(notes).trim();
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'ProjectManager',
+      action: 'ReturnedForCorrection',
+      comments: String(notes).trim(),
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(200).json({ success: true, data: transfer, message: `Stock transfer ${transfer.transferNumber} returned for correction.` });
+  });
+
+  // POST /api/stock-transfers/:id/dispatch (Post Dispatch Outbound Movement to Stock Ledger)
+  router.post('/stock-transfers/:id/dispatch', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']), (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const inventoryBalances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+    const user = req.user!;
+    const nowUtc = new Date().toISOString();
+
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+
+    if (transfer.status === 'Dispatched') {
+      return res.status(200).json({ success: true, data: transfer, message: `Transfer ${transfer.transferNumber} is already dispatched.` });
+    }
+
+    if (transfer.status !== 'Approved') {
+      return res.status(400).json({ success: false, message: `Cannot dispatch transfer in status '${transfer.status}'. Only 'Approved' transfers can be dispatched.` });
+    }
+
+    const { items, dispatchDate, expectedArrivalDate, remarks } = req.body || {};
+
+    if (Array.isArray(items) && items.length > 0) {
+      for (const line of items) {
+        const item = transfer.items.find((it) => it.id === line.id || it.materialId === line.materialId);
+        if (item) {
+          const dQty = parseFloat(line.dispatchedQuantity);
+          if (!isNaN(dQty) && dQty > 0) {
+            if (dQty > item.approvedQuantity) {
+              return res.status(400).json({
+                success: false,
+                message: `Dispatch violation: Dispatched quantity (${dQty}) exceeds approved quantity (${item.approvedQuantity}) for material '${item.materialName}'.`,
+              });
+            }
+            item.dispatchedQuantity = dQty;
+          }
+        }
+      }
+    } else {
+      // Default dispatched quantity to approved quantity
+      transfer.items.forEach((it) => {
+        if (!it.dispatchedQuantity || it.dispatchedQuantity <= 0) {
+          it.dispatchedQuantity = it.approvedQuantity || it.requestedQuantity;
+        }
+      });
+    }
+
+    try {
+      postStockTransferDispatchToLedger(transfer, user, nowUtc, stockLedger, inventoryBalances, materials);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message || 'Dispatch stock ledger posting failed.' });
+    }
+
+    transfer.status = 'Dispatched';
+    transfer.actualDispatchDate = dispatchDate || nowUtc.split('T')[0];
+    if (expectedArrivalDate) transfer.expectedArrivalDate = expectedArrivalDate;
+    if (remarks) transfer.remarks = String(remarks).trim();
+
+    transfer.dispatchedByUserId = user.sub;
+    transfer.dispatchedByName = user.fullName;
+    transfer.dispatchedAtUtc = nowUtc;
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Dispatched',
+      comments: `Stock transfer dispatched from ${transfer.sourceWarehouseName}. Outbound stock ledger entries recorded and in-transit inventory established.`,
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+
+    writeJsonAtomic(stockTransfersFile, transfers);
+    writeJsonAtomic(stockLedgerFile, stockLedger);
+    writeJsonAtomic(inventoryBalancesFile, inventoryBalances);
+
+    return res.status(200).json({
+      success: true,
+      data: transfer,
+      message: `Stock transfer ${transfer.transferNumber} dispatched successfully. Source stock reduced and in-transit tracking active.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/stock-transfers/:id/receive (Post Inbound Destination Receipt to Stock Ledger)
+  router.post('/stock-transfers/:id/receive', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']), (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const inventoryBalances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+    const user = req.user!;
+    const nowUtc = new Date().toISOString();
+
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+
+    if (transfer.status === 'Completed') {
+      return res.status(200).json({ success: true, data: transfer, message: `Transfer ${transfer.transferNumber} is already completed.` });
+    }
+
+    if (transfer.status !== 'Dispatched' && transfer.status !== 'PartiallyReceived') {
+      return res.status(400).json({ success: false, message: `Cannot receive transfer in status '${transfer.status}'. Only 'Dispatched' or 'PartiallyReceived' transfers can be received.` });
+    }
+
+    const { items, actualReceiptDate, remarks } = req.body || {};
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Receipt verification must include at least one item line.' });
+    }
+
+    let hasDiscrepancy = false;
+
+    for (const line of items) {
+      const item = transfer.items.find((it) => it.id === line.id || it.materialId === line.materialId);
+      if (item) {
+        const good = Math.max(0, parseFloat(line.receivedGoodQuantity ?? item.receivedGoodQuantity) || 0);
+        const damaged = Math.max(0, parseFloat(line.damagedQuantity ?? item.damagedQuantity) || 0);
+        const short = Math.max(0, parseFloat(line.shortQuantity ?? item.shortQuantity) || 0);
+        const disputed = Math.max(0, parseFloat(line.disputedQuantity ?? item.disputedQuantity) || 0);
+
+        const totalQty = round2(good + damaged + short + disputed);
+
+        if (totalQty > item.dispatchedQuantity) {
+          return res.status(400).json({
+            success: false,
+            message: `Over-Receipt Violation: Total received quantity (${totalQty}) exceeds dispatched quantity (${item.dispatchedQuantity}) for '${item.materialName}'.`,
+          });
+        }
+
+        item.receivedGoodQuantity = good;
+        item.damagedQuantity = damaged;
+        item.shortQuantity = short;
+        item.disputedQuantity = disputed;
+
+        if (line.discrepancyReason) item.discrepancyReason = String(line.discrepancyReason).trim();
+        if (line.inspectionNotes) item.inspectionNotes = String(line.inspectionNotes).trim();
+
+        if (damaged > 0 || short > 0 || disputed > 0) {
+          hasDiscrepancy = true;
+          item.resolutionStatus = item.resolutionStatus || 'Pending';
+        }
+      }
+    }
+
+    postStockTransferReceiptToLedger(transfer, user, nowUtc, stockLedger, inventoryBalances, materials);
+
+    const totalDispatched = round2(transfer.items.reduce((sum, it) => sum + it.dispatchedQuantity, 0));
+    const totalGood = round2(transfer.items.reduce((sum, it) => sum + it.receivedGoodQuantity, 0));
+    const totalAccounted = round2(transfer.items.reduce((sum, it) => sum + (it.receivedGoodQuantity + it.damagedQuantity + it.shortQuantity + it.disputedQuantity), 0));
+
+    let nextStatus: TransferStatus = 'Completed';
+    if (totalAccounted < totalDispatched) {
+      nextStatus = 'PartiallyReceived';
+    } else if (hasDiscrepancy) {
+      nextStatus = 'Received';
+      transfer.discrepancyStatus = 'PendingReview';
+    } else {
+      nextStatus = 'Completed';
+      transfer.discrepancyStatus = 'None';
+    }
+
+    transfer.status = nextStatus;
+    transfer.actualReceiptDate = actualReceiptDate || nowUtc.split('T')[0];
+    if (remarks) transfer.remarks = String(remarks).trim();
+
+    transfer.receivedByUserId = user.sub;
+    transfer.receivedByName = user.fullName;
+    transfer.receivedAtUtc = nowUtc;
+
+    if (nextStatus === 'Completed') {
+      transfer.completedByUserId = user.sub;
+      transfer.completedByName = user.fullName;
+      transfer.completedAtUtc = nowUtc;
+    }
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Received',
+      comments: `Transfer received at destination. Accepted Good: ${totalGood}, Damaged: ${transfer.items.reduce((sum, it) => sum + it.damagedQuantity, 0)}, Short: ${transfer.items.reduce((sum, it) => sum + it.shortQuantity, 0)}.`,
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+
+    writeJsonAtomic(stockTransfersFile, transfers);
+    writeJsonAtomic(stockLedgerFile, stockLedger);
+    writeJsonAtomic(inventoryBalancesFile, inventoryBalances);
+
+    return res.status(200).json({
+      success: true,
+      data: transfer,
+      message: `Stock transfer ${transfer.transferNumber} receipt posted. Usable stock increased at destination.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/stock-transfers/:id/complete
+  router.post('/stock-transfers/:id/complete', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+    const { comments } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    transfer.status = 'Completed';
+    transfer.discrepancyStatus = 'Resolved';
+    transfer.completedByUserId = user.sub;
+    transfer.completedByName = user.fullName;
+    transfer.completedAtUtc = nowUtc;
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'InventoryManager',
+      action: 'Completed',
+      comments: comments ? String(comments).trim() : 'Stock transfer marked as fully completed and reconciled.',
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(200).json({ success: true, data: transfer, message: `Stock transfer ${transfer.transferNumber} completed.` });
+  });
+
+  // POST /api/stock-transfers/:id/discrepancies/:lineId/resolve
+  router.post('/stock-transfers/:id/discrepancies/:lineId/resolve', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+    const item = transfer.items.find((it) => it.id === req.params.lineId || it.materialId === req.params.lineId);
+
+    if (!item) {
+      return res.status(404).json({ success: false, message: `Transfer line item '${req.params.lineId}' was not found` });
+    }
+
+    const { resolutionNotes, comments, action } = req.body || {};
+    const notes = resolutionNotes || comments || action || 'Discrepancy reviewed and reconciled.';
+
+    const nowUtc = new Date().toISOString();
+    item.resolutionStatus = 'Resolved';
+    item.resolutionNotes = String(notes).trim();
+
+    const allLinesResolved = transfer.items.every((it) => !it.resolutionStatus || it.resolutionStatus === 'Resolved' || it.resolutionStatus === 'None');
+    if (allLinesResolved) {
+      transfer.discrepancyStatus = 'Resolved';
+      if (transfer.status === 'Received') {
+        transfer.status = 'Completed';
+        transfer.completedByUserId = user.sub;
+        transfer.completedByName = user.fullName;
+        transfer.completedAtUtc = nowUtc;
+      }
+    }
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'InventoryManager',
+      action: 'DiscrepancyResolved',
+      comments: `Discrepancy resolved for '${item.materialName}'. Action/Notes: ${notes}`,
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(200).json({
+      success: true,
+      data: transfer,
+      message: `Discrepancy resolved for line item '${item.materialName}'.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // Immutability Protection for Dispatched or Posted Stock Transfers (HTTP 405 Method Not Allowed)
+  router.delete('/stock-transfers/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const paramId = req.params.id;
+    const transfer = transfers.find((t) => t.id === paramId || t.transferNumber === paramId);
+
+    if (transfer && ['Dispatched', 'PartiallyReceived', 'Received', 'Completed'].includes(transfer.status)) {
+      return res.status(405).json({
+        success: false,
+        message: 'Method Not Allowed (Policy Violation): Direct deletion of dispatched or completed stock transfers is prohibited.',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(405).json({
+      success: false,
+      message: 'Method Not Allowed: Direct deletion of stock transfer vouchers is prohibited.',
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // Immutability Protection for Posted Material Issues & Returns (HTTP 405 Method Not Allowed)
+  router.put('/material-issues/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const issue = issues.find((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+    if (issue && issue.status === 'Posted') {
+      return res.status(405).json({
+        success: false,
+        message: 'Method Not Allowed (Policy Violation): Posted material issues are permanently immutable. Direct editing or deletion is prohibited.',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+    return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+  });
+
+  router.put('/material-returns/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const returnDoc = returns.find((r) => r.id === req.params.id || r.returnNumber === req.params.id);
+    if (returnDoc && returnDoc.status === 'Posted') {
+      return res.status(405).json({
+        success: false,
+        message: 'Method Not Allowed (Policy Violation): Posted material returns are permanently immutable. Direct editing or deletion is prohibited.',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+    return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+  });
+
+  router.delete('/material-issues/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const issue = issues.find((i) => i.id === req.params.id || i.issueNumber === req.params.id);
+    if (issue && issue.status === 'Posted') {
+      return res.status(405).json({
+        success: false,
+        message: 'Method Not Allowed (Policy Violation): Direct deletion of posted material issues is prohibited.',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+    return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+  });
+
+  router.delete('/material-returns/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const returnDoc = returns.find((r) => r.id === req.params.id || r.returnNumber === req.params.id);
+    if (returnDoc && returnDoc.status === 'Posted') {
+      return res.status(405).json({
+        success: false,
+        message: 'Method Not Allowed (Policy Violation): Direct deletion of posted material returns is prohibited.',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+    return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+  });
+
   // Immutable Protections: Direct CRUD editing or deletion of stock ledger or balances is prohibited
-  router.put(['/inventory/ledger/:id', '/inventory/balances/:id'], authMiddleware, (_req: Request, res: Response) => {
+  router.put('/inventory/ledger/:id', authMiddleware, (_req: AuthenticatedRequest, res: Response) => {
     return res.status(405).json({
       success: false,
       message: 'Method Not Allowed (Policy Violation): Direct mutation of posted inventory transactions or balances is strictly prohibited. Use an authorized reversal or stock adjustment.',
@@ -5803,7 +8928,23 @@ function setupApiRoutes(router: express.Router) {
     });
   });
 
-  router.delete(['/inventory/ledger/:id', '/inventory/balances/:id'], authMiddleware, (_req: Request, res: Response) => {
+  router.put('/inventory/balances/:id', authMiddleware, (_req: AuthenticatedRequest, res: Response) => {
+    return res.status(405).json({
+      success: false,
+      message: 'Method Not Allowed (Policy Violation): Direct mutation of posted inventory transactions or balances is strictly prohibited. Use an authorized reversal or stock adjustment.',
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  router.delete('/inventory/ledger/:id', authMiddleware, (_req: AuthenticatedRequest, res: Response) => {
+    return res.status(405).json({
+      success: false,
+      message: 'Method Not Allowed (Policy Violation): Direct deletion of posted inventory transactions or balances is strictly prohibited. The stock ledger is immutable.',
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  router.delete('/inventory/balances/:id', authMiddleware, (_req: AuthenticatedRequest, res: Response) => {
     return res.status(405).json({
       success: false,
       message: 'Method Not Allowed (Policy Violation): Direct deletion of posted inventory transactions or balances is strictly prohibited. The stock ledger is immutable.',
@@ -5896,6 +9037,13 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[ConstructionStock] Server running on http://0.0.0.0:${PORT}`);
   });
+
+  if (PORT !== 3000) {
+    const http = await import('node:http');
+    http.createServer(app).listen(3000, '0.0.0.0', () => {
+      console.log(`[ConstructionStock] Secondary test server running on http://0.0.0.0:3000`);
+    });
+  }
 }
 
 startServer().catch((err) => {
