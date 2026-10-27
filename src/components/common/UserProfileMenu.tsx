@@ -4,7 +4,7 @@ import { useAuth } from '../../app/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 export const UserProfileMenu: React.FC = () => {
-  const { user, switchRoleProfile, hasRole } = useAuth();
+  const { user, logout, switchRoleProfile, hasRole } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -47,6 +47,21 @@ export const UserProfileMenu: React.FC = () => {
   const handleNavigate = (path: string) => {
     setIsOpen(false);
     navigate(path);
+  };
+
+  const handleLogout = async () => {
+    setIsOpen(false);
+    await logout();
+    navigate('/login');
+  };
+
+  const handleSwitchRole = async (email: string) => {
+    setIsOpen(false);
+    try {
+      await switchRoleProfile(email);
+    } catch {
+      navigate('/login');
+    }
   };
 
   return (
@@ -176,7 +191,7 @@ export const UserProfileMenu: React.FC = () => {
                 color: 'var(--color-text-subtle)',
               }}
             >
-              Switch Active Role (Bypass Mode)
+              Switch Test Role (RBAC Session)
             </div>
             {[
               { label: 'Super Admin', email: 'admin@constructcorp.com' },
@@ -185,6 +200,7 @@ export const UserProfileMenu: React.FC = () => {
               { label: 'Storekeeper', email: 'store.north@constructcorp.com' },
               { label: 'Procurement Officer', email: 'procurement@constructcorp.com' },
               { label: 'Accounts Officer', email: 'accounts@constructcorp.com' },
+              { label: 'Auditor / Viewer', email: 'auditor@constructcorp.com' },
             ].map((roleOpt) => (
               <button
                 key={roleOpt.email}
@@ -196,18 +212,26 @@ export const UserProfileMenu: React.FC = () => {
                   fontWeight: user.email === roleOpt.email ? 700 : 400,
                   color: user.email === roleOpt.email ? 'var(--color-orange-600)' : undefined,
                 }}
-                onClick={() => {
-                  switchRoleProfile(roleOpt.email);
-                  setIsOpen(false);
-                }}
+                onClick={() => handleSwitchRole(roleOpt.email)}
               >
                 <span>{roleOpt.label}</span>
               </button>
             ))}
+
+            <div className="dropdown-divider" />
+
+            <button
+              type="button"
+              className="dropdown-item danger"
+              onClick={handleLogout}
+              style={{ color: 'var(--color-danger-text)' }}
+            >
+              <LogOut size={16} />
+              <span>Sign Out</span>
+            </button>
           </div>
         </div>
       )}
     </div>
   );
 };
-

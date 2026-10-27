@@ -9,3 +9,27 @@
 @import "./styles/base.css";
 @import "./styles/components.css";
 @import "./styles/layout.css";
+
+@media print {
+  .app-sidebar,
+  .app-topbar,
+  .sidebar-backdrop,
+  .no-print {
+    display: none !important;
+  }
+
+  .app-shell,
+  .app-main,
+  .app-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: #FFFFFF !important;
+  }
+
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+}

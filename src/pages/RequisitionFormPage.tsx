@@ -22,6 +22,7 @@ import {
   RequisitionPriority,
 } from '../services/api/requisitionService';
 import { materialService, Material } from '../services/api/materialService';
+import { inventoryService, InventoryBalance } from '../services/api/inventoryService';
 
 interface FormLineItem {
   key: string;
@@ -33,14 +34,16 @@ interface FormLineItem {
 
 export const RequisitionFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const isEditMode = Boolean(id);
+  const isEditMode = Boolean(id && id !== 'new');
   const navigate = useNavigate();
   const { user } = useAuth();
 
   // Reference Catalogs
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [projectBalances, setProjectBalances] = useState<InventoryBalance[]>([]);
   const [isLoadingRefData, setIsLoadingRefData] = useState<boolean>(true);
+  const [catalogLoadError, setCatalogLoadError] = useState<string | null>(null);
 
   // Form Fields
   const [projectId, setProjectId] = useState<string>('');
@@ -69,46 +72,78 @@ export const RequisitionFormPage: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       setIsLoadingRefData(true);
+      setFormError(null);
+      setCatalogLoadError(null);
       try {
-        const [projList, matResponse] = await Promise.all([
+        const [projResult, matResult] = await Promise.allSettled([
           requisitionService.getProjects(),
           materialService.getMaterials(undefined, undefined, 'ACTIVE'),
         ]);
 
-        const matList = Array.isArray(matResponse.data) ? matResponse.data : [];
-        setProjects(projList);
-        setMaterials(matList);
+        const failureMessages: string[] = [];
 
-        if (projList.length > 0 && !projectId) {
-          setProjectId(projList[0].id);
+        if (projResult.status === 'fulfilled') {
+          const projList = Array.isArray(projResult.value) ? projResult.value : [];
+          setProjects(projList);
+          if (projList.length > 0 && !projectId) {
+            setProjectId(projList[0].id);
+          }
+        } else {
+          console.error('Failed to load project sites (/api/v1/projects):', projResult.reason);
+          failureMessages.push(
+            `Project sites failed to load (GET /api/v1/projects): ${projResult.reason?.message || 'Request failed'}`
+          );
+        }
+
+        if (matResult.status === 'fulfilled') {
+          const matList = Array.isArray(matResult.value?.data) ? matResult.value.data : [];
+          setMaterials(matList);
+        } else {
+          console.error('Failed to load material master (/api/v1/materials):', matResult.reason);
+          failureMessages.push(
+            `Material master catalog failed to load (GET /api/v1/materials): ${matResult.reason?.message || 'Request failed'}`
+          );
         }
 
         if (isEditMode && id) {
-          const req = await requisitionService.getRequisitionById(id);
-          setExistingRequisition(req);
+          try {
+            const req = await requisitionService.getRequisitionById(id);
+            setExistingRequisition(req);
 
-          if (req.status !== 'Draft' && req.status !== 'ReturnedForCorrection') {
-            setFormError(`Requisition is in status '${req.status}' and cannot be modified.`);
-          }
+            if (req.status !== 'Draft' && req.status !== 'ReturnedForCorrection') {
+              setFormError(`Requisition is in status '${req.status}' and cannot be modified.`);
+            }
 
-          setProjectId(req.projectId);
-          setRequiredDate(req.requiredDate);
-          setPriority(req.priority);
-          setPurpose(req.purpose);
-          setWorkActivity(req.workActivity || '');
-          setSiteLocationDetail(req.siteLocationDetail || '');
+            setProjectId(req.projectId);
+            setRequiredDate(req.requiredDate);
+            setPriority(req.priority);
+            setPurpose(req.purpose);
+            setWorkActivity(req.workActivity || '');
+            setSiteLocationDetail(req.siteLocationDetail || '');
 
-          if (req.items && req.items.length > 0) {
-            setLines(
-              req.items.map((it, idx) => ({
-                key: `line-${idx}-${it.id}`,
-                id: it.id,
-                materialId: it.materialId,
-                requestedQuantity: it.requestedQuantity,
-                remarks: it.remarks || '',
-              }))
+            if (req.items && req.items.length > 0) {
+              setLines(
+                req.items.map((it, idx) => ({
+                  key: `line-${idx}-${it.id}`,
+                  id: it.id,
+                  materialId: it.materialId,
+                  requestedQuantity: it.requestedQuantity,
+                  remarks: it.remarks || '',
+                }))
+              );
+            }
+          } catch (reqErr: any) {
+            console.error(`Failed to load requisition ${id}:`, reqErr);
+            failureMessages.push(
+              `Requisition '${id}' failed to load (GET /api/v1/requisitions/${id}): ${reqErr?.message || 'Not found'}`
             );
           }
+        }
+
+        if (failureMessages.length > 0) {
+          const combined = failureMessages.join(' • ');
+          setCatalogLoadError(combined);
+          setFormError(combined);
         }
       } catch (err: any) {
         console.error('Failed to load initial form data:', err);
@@ -120,6 +155,28 @@ export const RequisitionFormPage: React.FC = () => {
 
     loadData();
   }, [id, isEditMode]);
+
+  // Load real stock balances for the selected project site (non-blocking)
+  useEffect(() => {
+    if (!projectId) {
+      setProjectBalances([]);
+      return;
+    }
+    let active = true;
+    inventoryService
+      .getBalances({ projectId, pageSize: 100 })
+      .then((res) => {
+        if (active && res.success && res.data?.items) {
+          setProjectBalances(res.data.items);
+        }
+      })
+      .catch(() => {
+        if (active) setProjectBalances([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
 
   // Handle adding line item
   const handleAddLine = () => {
@@ -156,6 +213,14 @@ export const RequisitionFormPage: React.FC = () => {
   const validateForm = (isDirectSubmit: boolean): boolean => {
     const errors: Record<string, string> = {};
     setFormError(null);
+
+    if (catalogLoadError || projects.length === 0 || materials.length === 0) {
+      setFormError(
+        catalogLoadError ||
+          'Required project or material master data is unavailable. Please refresh or check your permissions.'
+      );
+      return false;
+    }
 
     if (!projectId) {
       errors.projectId = 'Please select a target project site';
@@ -724,19 +789,36 @@ export const RequisitionFormPage: React.FC = () => {
                         {selectedMat ? selectedMat.baseUnitName : '&mdash;'}
                       </td>
 
-                      {/* Stock Availability indicator per Prompt 6 rule */}
+                      {/* Stock Availability indicator */}
                       <td style={{ padding: '0.75rem 1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
-                          <Badge variant="neutral">
-                            Not yet connected
-                          </Badge>
-                          <span
-                            title="Authoritative stock balances will link in subsequent module. Data is not fabricated."
-                            style={{ cursor: 'help', color: 'var(--color-charcoal-500)' }}
-                          >
-                            <Info size={13} />
+                        {selectedMat ? (
+                          (() => {
+                            const matchingBalances = projectBalances.filter(
+                              (b) => b.materialId === selectedMat.id || b.materialCode === selectedMat.itemCode
+                            );
+                            const totalAvailable = matchingBalances.reduce(
+                              (sum, b) => sum + (b.quantityAvailable ?? b.quantityOnHand ?? 0),
+                              0
+                            );
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+                                <Badge variant={totalAvailable > 0 ? 'success' : 'warning'}>
+                                  {totalAvailable.toLocaleString()} {selectedMat.baseUnitName} avail.
+                                </Badge>
+                                <span
+                                  title="Authoritative usable stock across project site warehouses"
+                                  style={{ cursor: 'help', color: 'var(--color-charcoal-500)' }}
+                                >
+                                  <Info size={13} />
+                                </span>
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <span style={{ color: 'var(--color-charcoal-400)', fontSize: '0.75rem' }}>
+                            Select material
                           </span>
-                        </div>
+                        )}
                       </td>
 
                       {/* Remarks */}
@@ -810,7 +892,7 @@ export const RequisitionFormPage: React.FC = () => {
                 size="md"
                 icon={<Save size={16} />}
                 onClick={() => handleSaveOrSubmit(false)}
-                disabled={isSubmitting}
+                disabled={isSubmitting || Boolean(catalogLoadError) || projects.length === 0 || materials.length === 0}
               >
                 Save as Draft
               </Button>
@@ -821,6 +903,7 @@ export const RequisitionFormPage: React.FC = () => {
                 icon={<Send size={16} />}
                 onClick={() => handleSaveOrSubmit(true)}
                 isLoading={isSubmitting}
+                disabled={isSubmitting || Boolean(catalogLoadError) || projects.length === 0 || materials.length === 0}
               >
                 Submit for Approval
               </Button>

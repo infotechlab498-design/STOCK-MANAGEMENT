@@ -113,13 +113,57 @@ async function runMaterialIssueReturnTests() {
         quantityOnHand: 100,
         quantityReserved: 0,
         quantityAvailable: 100,
+        weightedAverageCost: 120.00,
         weightedAverageUnitCost: 120.00,
+        inventoryValue: 12000.00,
         totalInventoryValue: 12000.00,
         lastTransactionDate: new Date().toISOString(),
+        lastUpdatedUtc: new Date().toISOString(),
         updatedAtUtc: new Date().toISOString(),
       },
     ];
     fs.writeFileSync(path.join(dataDir, 'inventory_balances.json'), JSON.stringify(balances, null, 2));
+    fs.writeFileSync(
+      path.join(dataDir, 'stock_ledger.json'),
+      JSON.stringify(
+        [
+          {
+            id: 'SL-OPEN-TEST-01',
+            referenceNumber: 'SL-2026-0001',
+            transactionDate: new Date().toISOString().slice(0, 10),
+            timestampUtc: new Date().toISOString(),
+            transactionType: 'GoodsReceipt',
+            sourceDocumentType: 'GoodsReceivedNote',
+            sourceDocumentId: 'GRN-SEED-01',
+            sourceDocumentNumber: 'GRN-2026-0001',
+            materialId: 'MAT-001',
+            materialCode: 'CONC-40',
+            materialName: 'Ready-Mix Concrete Grade 40',
+            unitCode: 'CuM',
+            warehouseId: 'WH-02',
+            warehouseName: 'North Industrial Depot',
+            projectId: 'PRJ-101',
+            projectName: 'Metro Rail Viaduct Sector 4',
+            quantityIn: 100,
+            quantityOut: 0,
+            signedQuantity: 100,
+            unitCost: 120.0,
+            transactionValue: 12000.0,
+            balanceQuantityBefore: 0,
+            balanceQuantityAfter: 100,
+            weightedAverageCostBefore: 0,
+            weightedAverageCostAfter: 120.0,
+            totalValuationBefore: 0,
+            totalValuationAfter: 12000.0,
+            createdByUserId: 'USR-ADMIN-01',
+            createdByName: 'System Administrator',
+            remarks: 'Opening seeded stock for Material Issue & Return test suite',
+          },
+        ],
+        null,
+        2
+      )
+    );
 
     // Create an approved requisition
     let reqs = JSON.parse(fs.readFileSync(path.join(dataDir, 'requisitions.json'), 'utf8') || '[]');

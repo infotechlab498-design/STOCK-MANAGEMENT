@@ -1,203 +1,363 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Bell, AlertTriangle, Truck, ClipboardList, Check } from 'lucide-react';
-
-interface NotificationItemData {
-  id: string;
-  title: string;
-  description: string;
-  time: string;
-  type: 'warning' | 'transit' | 'approval';
-  read: boolean;
-}
-
-const initialNotifications: NotificationItemData[] = [
-  {
-    id: 'notif-1',
-    title: 'Low Safety Stock Alert',
-    description: 'Ordinary Portland Cement (CEM I 42.5N) is at 80 bags (threshold: 200).',
-    time: '25m ago',
-    type: 'warning',
-    read: false,
-  },
-  {
-    id: 'notif-2',
-    title: 'Transfer Dispatched (In-Transit)',
-    description: 'TRF-2026-0041 PVC Pipe 110mm awaiting Pier Depot confirmation.',
-    time: '2h ago',
-    type: 'transit',
-    read: false,
-  },
-  {
-    id: 'notif-3',
-    title: 'Requisition Awaiting Approval',
-    description: 'REQ-2026-0089 for High-Tensile Rebar 16mm requires Project Manager sign-off.',
-    time: '4h ago',
-    type: 'approval',
-    read: false,
-  },
-];
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Bell,
+  CheckCheck,
+  AlertTriangle,
+  PackageCheck,
+  FileWarning,
+  Truck,
+  ArrowRight,
+  ExternalLink,
+  RefreshCw,
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  notificationService,
+  NotificationItem,
+  NotificationSeverity,
+} from '../../services/api/notificationService';
+import { useAuth } from '../../app/AuthContext';
 
 export const NotificationBell: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItemData[]>(initialNotifications);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await notificationService.getNotifications({ page: 1, pageSize: 8 });
+      setItems(res.items || []);
+      setUnreadCount(res.unreadCount || 0);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to load notifications');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 45000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications, user?.id]);
 
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+  useEffect(() => {
+    if (open) {
+      fetchNotifications();
+    }
+  }, [open, fetchNotifications]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
       }
     };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen]);
-
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
-
-  const getIcon = (type: NotificationItemData['type']) => {
-    switch (type) {
-      case 'warning':
-        return <AlertTriangle size={14} style={{ color: 'var(--color-warning-text)' }} />;
-      case 'transit':
-        return <Truck size={14} style={{ color: 'var(--color-transit-text)' }} />;
-      case 'approval':
-      default:
-        return <ClipboardList size={14} style={{ color: 'var(--color-orange-600)' }} />;
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch {
+      // ignore transient error
     }
   };
 
-  const getIconBg = (type: NotificationItemData['type']) => {
-    switch (type) {
-      case 'warning':
-        return 'var(--color-warning-bg)';
-      case 'transit':
-        return 'var(--color-transit-bg)';
-      case 'approval':
+  const handleClickNotification = async (n: NotificationItem) => {
+    try {
+      if (!n.isRead) {
+        await notificationService.markAsRead(n.id);
+        setItems((prev) => prev.map((item) => (item.id === n.id ? { ...item, isRead: true } : item)));
+        setUnreadCount((c) => Math.max(0, c - 1));
+      }
+    } catch {
+      // ignore error and still navigate
+    }
+    setOpen(false);
+    if (n.targetRoute) {
+      navigate(n.targetRoute);
+    }
+  };
+
+  const getIcon = (severity: NotificationSeverity, category: string) => {
+    if (category === 'StockTransfer') {
+      return <Truck size={16} style={{ color: '#DD6B20' }} />;
+    }
+    switch (severity) {
+      case 'Warning':
+        return <AlertTriangle size={16} style={{ color: 'var(--color-warning)' }} />;
+      case 'Critical':
+        return <FileWarning size={16} style={{ color: 'var(--color-danger)' }} />;
+      case 'Success':
+        return <PackageCheck size={16} style={{ color: 'var(--color-success)' }} />;
       default:
-        return 'var(--color-orange-100)';
+        return <Bell size={16} style={{ color: 'var(--color-info)' }} />;
+    }
+  };
+
+  const formatTimestamp = (iso: string) => {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString('en-US', {
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return iso.slice(0, 16).replace('T', ' ');
     }
   };
 
   return (
-    <div style={{ position: 'relative' }} ref={dropdownRef}>
+    <div className="dropdown-wrapper" ref={menuRef}>
       <button
         type="button"
-        className="btn btn-ghost btn-icon-only"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-haspopup="true"
-        aria-expanded={isOpen}
-        aria-label={`View alerts and notifications (${unreadCount} unread)`}
-        title="Operational Stock Alerts & Approvals"
+        className="topbar-icon-btn"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-label={`Notifications (${unreadCount} unread)`}
+        title="Operational Alerts & Action Centre"
       >
-        <Bell size={18} />
-        {unreadCount > 0 && (
-          <span
-            style={{
-              position: 'absolute',
-              top: 5,
-              right: 5,
-              minWidth: 16,
-              height: 16,
-              backgroundColor: 'var(--color-orange-500)',
-              color: '#FFFFFF',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '0.625rem',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0 3px',
-              border: '2px solid var(--color-bg-surface)',
-            }}
-          >
-            {unreadCount}
-          </span>
-        )}
+        <Bell size={19} />
+        {unreadCount > 0 && <span className="notification-dot" />}
       </button>
 
-      {isOpen && (
-        <div className="dropdown-menu" role="menu" style={{ width: 320 }}>
-          <div className="dropdown-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontWeight: 600, fontSize: 'var(--font-size-xs)', color: 'var(--color-charcoal-900)' }}>
-              Stock Alerts & Approvals
+      {open && (
+        <div
+          className="dropdown-panel"
+          style={{ width: '380px', right: 0 }}
+          role="dialog"
+          aria-label="Notifications Panel"
+        >
+          <div
+            style={{
+              padding: 'var(--space-3) var(--space-4)',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: 'var(--color-gray-50)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-charcoal-900)' }}>
+                Action & Notification Centre
+              </span>
+              {unreadCount > 0 && (
+                <span
+                  style={{
+                    backgroundColor: 'var(--color-orange-500)',
+                    color: '#fff',
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: '999px',
+                  }}
+                >
+                  {unreadCount} unread
+                </span>
+              )}
             </div>
-            {unreadCount > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
                 type="button"
-                onClick={markAllRead}
+                onClick={fetchNotifications}
+                title="Refresh notifications"
                 style={{
                   background: 'none',
                   border: 'none',
-                  fontSize: '0.6875rem',
-                  color: 'var(--color-orange-600)',
                   cursor: 'pointer',
+                  color: 'var(--color-charcoal-600)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 3,
                 }}
               >
-                <Check size={12} />
-                <span>Mark read</span>
+                <RefreshCw size={13} />
               </button>
-            )}
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllRead}
+                  style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--color-orange-600)',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <CheckCheck size={14} />
+                  Mark all read
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="dropdown-body">
-            {notifications.length === 0 ? (
-              <div style={{ padding: 'var(--space-4)', textAlign: 'center', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-subtle)' }}>
-                No active operational alerts
+          <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
+            {loading && items.length === 0 ? (
+              <div
+                style={{
+                  padding: 'var(--space-6)',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.8125rem',
+                }}
+              >
+                Synchronizing operational alerts...
+              </div>
+            ) : error ? (
+              <div
+                style={{
+                  padding: 'var(--space-4)',
+                  textAlign: 'center',
+                  color: 'var(--color-danger)',
+                  fontSize: '0.8125rem',
+                }}
+              >
+                {error}
+              </div>
+            ) : items.length === 0 ? (
+              <div
+                style={{
+                  padding: 'var(--space-6)',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.8125rem',
+                }}
+              >
+                No operational alerts in your authorized scope.
               </div>
             ) : (
-              notifications.map((item) => (
+              items.map((n) => (
                 <div
-                  key={item.id}
-                  className="notification-item"
-                  style={{ opacity: item.read ? 0.75 : 1 }}
+                  key={n.id}
+                  onClick={() => handleClickNotification(n)}
+                  style={{
+                    padding: 'var(--space-3) var(--space-4)',
+                    borderBottom: '1px solid var(--border-color)',
+                    backgroundColor: n.isRead ? 'var(--bg-surface)' : '#FFFBEB',
+                    display: 'flex',
+                    gap: 'var(--space-3)',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s ease',
+                  }}
                 >
-                  <div
-                    className="notification-icon-box"
-                    style={{ backgroundColor: getIconBg(item.type) }}
-                  >
-                    {getIcon(item.type)}
-                  </div>
-                  <div className="notification-content">
-                    <div className="notification-title">{item.title}</div>
-                    <div className="notification-desc">{item.description}</div>
-                    <div className="notification-time">{item.time}</div>
-                  </div>
-                  {!item.read && (
-                    <span
+                  <div style={{ marginTop: '2px', flexShrink: 0 }}>{getIcon(n.severity, n.category)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+                      <span
+                        style={{
+                          fontSize: '0.8125rem',
+                          fontWeight: n.isRead ? 600 : 700,
+                          color: 'var(--color-charcoal-900)',
+                        }}
+                      >
+                        {n.title}
+                      </span>
+                      {!n.isRead && (
+                        <span
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: '50%',
+                            backgroundColor: '#DD6B20',
+                            flexShrink: 0,
+                            marginTop: 5,
+                          }}
+                        />
+                      )}
+                    </div>
+                    <p
                       style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        backgroundColor: 'var(--color-orange-500)',
-                        flexShrink: 0,
-                        marginTop: 4,
+                        fontSize: '0.75rem',
+                        color: 'var(--color-charcoal-600)',
+                        marginTop: '3px',
+                        lineHeight: 1.4,
                       }}
-                    />
-                  )}
+                    >
+                      {n.message}
+                    </p>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginTop: '6px',
+                        fontSize: '0.6875rem',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      <span>
+                        {n.sourceDocumentNumber} • {formatTimestamp(n.createdAtUtc)}
+                      </span>
+                      <span
+                        style={{
+                          color: '#DD6B20',
+                          fontWeight: 600,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 2,
+                        }}
+                      >
+                        Open <ExternalLink size={10} />
+                      </span>
+                    </div>
+                  </div>
                 </div>
               ))
             )}
+          </div>
+
+          <div
+            style={{
+              padding: 'var(--space-2) var(--space-4)',
+              borderTop: '1px solid var(--border-color)',
+              backgroundColor: 'var(--color-gray-50)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                navigate('/notifications');
+              }}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: '#2D3748',
+              }}
+            >
+              View Full Notification & Action Centre
+              <ArrowRight size={14} style={{ color: '#DD6B20' }} />
+            </button>
           </div>
         </div>
       )}

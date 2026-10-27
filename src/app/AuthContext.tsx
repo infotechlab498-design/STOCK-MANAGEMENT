@@ -1,89 +1,23 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { authService, UserProfile } from '../services/api/authService';
-import { setAuthTokenProvider } from '../services/api/apiClient';
+import {
+  setAuthTokenProvider,
+  setUnauthorizedHandler,
+  isJwtTokenValid,
+  TOKEN_STORAGE_KEY,
+  USER_STORAGE_KEY,
+  ApiClientException,
+} from '../services/api/apiClient';
 
-export const BYPASS_USERS: Record<string, UserProfile> = {
-  'admin@constructcorp.com': {
-    id: 'USR-ADMIN-01',
-    username: 'admin',
-    email: 'admin@constructcorp.com',
-    fullName: 'Alexander Vance',
-    isActive: true,
-    roles: ['SuperAdmin', 'InventoryManager'],
-    projectScopes: ['PRJ-101', 'PRJ-102', 'PRJ-103'],
-    warehouseScopes: ['WH-01', 'WH-02', 'WH-03'],
-    lastLoginAtUtc: new Date().toISOString(),
-  },
-  'inv.manager@constructcorp.com': {
-    id: 'USR-MGR-02',
-    username: 'inv.manager',
-    email: 'inv.manager@constructcorp.com',
-    fullName: 'Elena Rostova',
-    isActive: true,
-    roles: ['InventoryManager'],
-    projectScopes: ['PRJ-101', 'PRJ-102', 'PRJ-103'],
-    warehouseScopes: ['WH-01', 'WH-02', 'WH-03'],
-    lastLoginAtUtc: new Date().toISOString(),
-  },
-  'pm.metro@constructcorp.com': {
-    id: 'USR-PM-03',
-    username: 'pm.metro',
-    email: 'pm.metro@constructcorp.com',
-    fullName: 'David Sterling',
-    isActive: true,
-    roles: ['ProjectManager'],
-    projectScopes: ['PRJ-101'],
-    warehouseScopes: ['WH-01', 'WH-02'],
-    lastLoginAtUtc: new Date().toISOString(),
-  },
-  'store.north@constructcorp.com': {
-    id: 'USR-STR-04',
-    username: 'store.north',
-    email: 'store.north@constructcorp.com',
-    fullName: 'Marcus Vance',
-    isActive: true,
-    roles: ['Storekeeper'],
-    projectScopes: ['PRJ-101'],
-    warehouseScopes: ['WH-02'],
-    lastLoginAtUtc: new Date().toISOString(),
-  },
-  'procurement@constructcorp.com': {
-    id: 'USR-PROC-05',
-    username: 'procurement',
-    email: 'procurement@constructcorp.com',
-    fullName: 'Samantha Lee',
-    isActive: true,
-    roles: ['ProcurementOfficer'],
-    projectScopes: ['PRJ-101', 'PRJ-102'],
-    warehouseScopes: ['WH-01', 'WH-02'],
-    lastLoginAtUtc: new Date().toISOString(),
-  },
-  'accounts@constructcorp.com': {
-    id: 'USR-ACCT-06',
-    username: 'accounts',
-    email: 'accounts@constructcorp.com',
-    fullName: 'Richard Hayes',
-    isActive: true,
-    roles: ['AccountsOfficer'],
-    projectScopes: ['PRJ-101', 'PRJ-102', 'PRJ-103'],
-    warehouseScopes: ['WH-01', 'WH-02', 'WH-03'],
-    lastLoginAtUtc: new Date().toISOString(),
-  },
-  'auditor@constructcorp.com': {
-    id: 'USR-VIEW-07',
-    username: 'auditor',
-    email: 'auditor@constructcorp.com',
-    fullName: 'Claire Bennett',
-    isActive: true,
-    roles: ['Viewer'],
-    projectScopes: ['PRJ-101'],
-    warehouseScopes: ['WH-02'],
-    lastLoginAtUtc: new Date().toISOString(),
-  },
+const DEMO_ROLE_PASSWORDS: Record<string, string> = {
+  'admin@constructcorp.com': 'Admin@2026!Stock',
+  'inv.manager@constructcorp.com': 'Manager@2026!Inv',
+  'pm.metro@constructcorp.com': 'Project@2026!Metro',
+  'store.north@constructcorp.com': 'Store@2026!Keeper',
+  'procurement@constructcorp.com': 'Procure@2026!Officer',
+  'accounts@constructcorp.com': 'Accounts@2026!Valuation',
+  'auditor@constructcorp.com': 'Viewer@2026!Audit',
 };
-
-const DEFAULT_BYPASS_USER = BYPASS_USERS['admin@constructcorp.com'];
-const DEFAULT_BYPASS_TOKEN = `bypass-token:${DEFAULT_BYPASS_USER.id}`;
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -92,7 +26,7 @@ interface AuthContextType {
   error: string | null;
   login: (usernameOrEmail: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  switchRoleProfile: (emailKey: string) => void;
+  switchRoleProfile: (emailKey: string) => Promise<void>;
   clearError: () => void;
   hasRole: (roles: string | string[]) => boolean;
   isProjectAuthorized: (projectId: string) => boolean;
@@ -101,142 +35,184 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const TOKEN_STORAGE_KEY = 'construct_stock_auth_token';
-const USER_STORAGE_KEY = 'construct_stock_auth_user';
+function readInitialSession(): { token: string | null; user: UserProfile | null } {
+  if (typeof window === 'undefined') {
+    return { token: null, user: null };
+  }
+  try {
+    const savedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const savedUserRaw = sessionStorage.getItem(USER_STORAGE_KEY);
+
+    if (!isJwtTokenValid(savedToken) || !savedUserRaw) {
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      sessionStorage.removeItem(USER_STORAGE_KEY);
+      return { token: null, user: null };
+    }
+
+    const parsedUser = JSON.parse(savedUserRaw) as UserProfile;
+    if (!parsedUser || typeof parsedUser.id !== 'string' || !Array.isArray(parsedUser.roles)) {
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      sessionStorage.removeItem(USER_STORAGE_KEY);
+      return { token: null, user: null };
+    }
+
+    return { token: savedToken!.trim(), user: parsedUser };
+  } catch {
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(USER_STORAGE_KEY);
+    return { token: null, user: null };
+  }
+}
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    if (typeof window !== 'undefined') {
-      const savedUser = sessionStorage.getItem(USER_STORAGE_KEY);
-      if (savedUser) {
-        try {
-          return JSON.parse(savedUser);
-        } catch {
-          // ignore parse error
-        }
-      }
-    }
-    return DEFAULT_BYPASS_USER;
-  });
-
-  const [token, setToken] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem(TOKEN_STORAGE_KEY) || DEFAULT_BYPASS_TOKEN;
-    }
-    return DEFAULT_BYPASS_TOKEN;
-  });
-
+  const initialSession = readInitialSession();
+  const [user, setUser] = useState<UserProfile | null>(initialSession.user);
+  const [token, setToken] = useState<string | null>(initialSession.token);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Configure centralized API client token provider immediately
-  setAuthTokenProvider(() => token || DEFAULT_BYPASS_TOKEN);
+  // Synchronously register active token provider
+  setAuthTokenProvider(() => (isJwtTokenValid(token) ? token : null));
 
-  useEffect(() => {
-    setAuthTokenProvider(() => token || DEFAULT_BYPASS_TOKEN);
-    if (typeof window !== 'undefined' && token && user) {
-      sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-      sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  const clearSessionState = useCallback((message?: string) => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      sessionStorage.removeItem(USER_STORAGE_KEY);
     }
-  }, [token, user]);
+    setToken(null);
+    setUser(null);
+    if (message) {
+      setError(message);
+    }
+  }, []);
 
-  // Background silent token upgrade if backend is reachable, never blocking or logging out
   useEffect(() => {
+    setAuthTokenProvider(() => (isJwtTokenValid(token) ? token : null));
+    setUnauthorizedHandler((reason) => {
+      clearSessionState(reason || 'Your session has expired. Please sign in again.');
+    });
+    return () => {
+      setUnauthorizedHandler(null);
+    };
+  }, [token, clearSessionState]);
+
+  // Verify existing session token against /api/v1/auth/me on mount
+  useEffect(() => {
+    if (!token || !isJwtTokenValid(token)) {
+      if (token) {
+        clearSessionState('Your session has expired. Please sign in again.');
+      }
+      return;
+    }
+
     let isMounted = true;
-    const syncSessionSilently = async () => {
+    const verifyActiveSession = async () => {
       try {
         const res = await authService.getMe();
         if (isMounted && res.success && res.data) {
           setUser(res.data);
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(res.data));
+          }
         }
-      } catch {
-        // Keep bypass user active without throwing or clearing session
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        if (err instanceof ApiClientException && (err.status === 401 || err.status === 403)) {
+          clearSessionState(err.message || 'Your session is no longer valid. Please sign in again.');
+        }
       }
     };
-    syncSessionSilently();
+
+    verifyActiveSession();
     return () => {
       isMounted = false;
     };
-  }, []);
-
-  const switchRoleProfile = (emailKey: string) => {
-    const target = BYPASS_USERS[emailKey.toLowerCase()] || DEFAULT_BYPASS_USER;
-    const newToken = `bypass-token:${target.id}`;
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem(TOKEN_STORAGE_KEY, newToken);
-      sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(target));
-    }
-    setToken(newToken);
-    setUser(target);
-    setError(null);
-  };
+  }, [token, clearSessionState]);
 
   const login = async (usernameOrEmail: string, password: string): Promise<void> => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await authService.login(usernameOrEmail, password);
-      if (res.success && res.data) {
+      const res = await authService.login(usernameOrEmail.trim(), password);
+      if (res.success && res.data && isJwtTokenValid(res.data.accessToken)) {
         const { accessToken, user: userProfile } = res.data;
-        sessionStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
-        sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile));
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
+          sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile));
+        }
+        setAuthTokenProvider(() => accessToken);
         setToken(accessToken);
         setUser(userProfile);
         return;
       }
-    } catch {
-      // If backend login fails (e.g. HTTP 500 in serverless environment), fall back to instant bypass login
+      throw new Error(res.message || 'Authentication failed');
+    } catch (err: unknown) {
+      const message =
+        err instanceof ApiClientException
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : 'Invalid credentials or unable to reach authentication server.';
+      setError(message);
+      throw err;
     } finally {
       setIsLoading(false);
     }
+  };
 
-    const normalized = usernameOrEmail.trim().toLowerCase();
-    const matchedProfile =
-      BYPASS_USERS[normalized] ||
-      Object.values(BYPASS_USERS).find((u) => u.username.toLowerCase() === normalized) ||
-      DEFAULT_BYPASS_USER;
-
-    const bypassToken = `bypass-token:${matchedProfile.id}`;
-    sessionStorage.setItem(TOKEN_STORAGE_KEY, bypassToken);
-    sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(matchedProfile));
-    setToken(bypassToken);
-    setUser(matchedProfile);
+  const switchRoleProfile = async (emailKey: string): Promise<void> => {
+    const normalized = emailKey.trim().toLowerCase();
+    const demoPassword = DEMO_ROLE_PASSWORDS[normalized];
+    if (!demoPassword) {
+      await logout();
+      return;
+    }
+    await login(normalized, demoPassword);
   };
 
   const logout = async (): Promise<void> => {
-    // When login is bypassed, reset to default SuperAdmin workspace instead of locking out on login screen
-    switchRoleProfile('admin@constructcorp.com');
+    setIsLoading(true);
+    try {
+      if (token && isJwtTokenValid(token)) {
+        await authService.logout();
+      }
+    } catch {
+      // Ignore logout network/401 error when clearing local session
+    } finally {
+      clearSessionState();
+      setIsLoading(false);
+    }
   };
 
   const clearError = () => setError(null);
 
   const hasRole = (roles: string | string[]): boolean => {
-    const activeUser = user || DEFAULT_BYPASS_USER;
+    if (!user || !token || !isJwtTokenValid(token)) return false;
     const required = Array.isArray(roles) ? roles : [roles];
-    return activeUser.roles.some((r) => required.includes(r));
+    return user.roles.some((r) => required.includes(r));
   };
 
   const isProjectAuthorized = (projectId: string): boolean => {
-    const activeUser = user || DEFAULT_BYPASS_USER;
-    if (activeUser.roles.includes('SuperAdmin') || activeUser.roles.includes('InventoryManager')) {
+    if (!user || !token || !isJwtTokenValid(token)) return false;
+    if (user.roles.includes('SuperAdmin') || user.roles.includes('InventoryManager')) {
       return true;
     }
-    return activeUser.projectScopes.includes(projectId);
+    return user.projectScopes.includes(projectId);
   };
 
   const isWarehouseAuthorized = (warehouseId: string): boolean => {
-    const activeUser = user || DEFAULT_BYPASS_USER;
-    if (activeUser.roles.includes('SuperAdmin') || activeUser.roles.includes('InventoryManager')) {
+    if (!user || !token || !isJwtTokenValid(token)) return false;
+    if (user.roles.includes('SuperAdmin') || user.roles.includes('InventoryManager')) {
       return true;
     }
-    return activeUser.warehouseScopes.includes(warehouseId);
+    return user.warehouseScopes.includes(warehouseId);
   };
 
   return (
     <AuthContext.Provider
       value={{
-        user: user || DEFAULT_BYPASS_USER,
-        token: token || DEFAULT_BYPASS_TOKEN,
+        user,
+        token,
         isLoading,
         error,
         login,
@@ -253,11 +229,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 };
 
-export function useAuth() {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
-
+};

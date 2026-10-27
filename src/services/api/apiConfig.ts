@@ -10,7 +10,7 @@ export interface ApiConfig {
 }
 
 export const apiConfig: ApiConfig = {
-  baseUrl: (import.meta.env.VITE_API_BASE_URL as string) || '/api/v1',
+  baseUrl: (import.meta.env?.VITE_API_BASE_URL as string | undefined) || '/api/v1',
   timeoutMs: 30000,
   defaultHeaders: {
     'Content-Type': 'application/json',

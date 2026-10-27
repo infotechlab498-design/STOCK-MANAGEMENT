@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../app/AuthContext';
+import { isJwtTokenValid } from '../services/api/apiClient';
 import { LoginPage } from '../components/auth/LoginPage';
 import { DashboardOverviewPage } from '../pages/DashboardOverviewPage';
 import { UsersManagementPage } from '../pages/UsersManagementPage';
@@ -31,16 +32,36 @@ import { MaterialReturnListPage } from '../pages/MaterialReturnListPage';
 import { MaterialReturnFormPage } from '../pages/MaterialReturnFormPage';
 import { MaterialReturnDetailPage } from '../pages/MaterialReturnDetailPage';
 import { RequisitionFulfillmentPage } from '../pages/RequisitionFulfillmentPage';
+import { StockTransferListPage } from '../pages/StockTransferListPage';
+import { StockTransferFormPage } from '../pages/StockTransferFormPage';
+import { StockTransferDetailPage } from '../pages/StockTransferDetailPage';
+import { InTransitInventoryPage } from '../pages/InTransitInventoryPage';
+import { TransferDiscrepancyQueuePage } from '../pages/TransferDiscrepancyQueuePage';
+import { ReportsCenterPage } from '../pages/ReportsCenterPage';
+import { NotificationsCenterPage } from '../pages/NotificationsCenterPage';
 import { ModulePlaceholderPage } from '../pages/ModulePlaceholderPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { LoadingSpinner } from '../components/common/EmptyState';
 
-// Protected Route Guard (Login Bypassed)
+// Protected Route Guard enforcing valid JWT session and role authorization
 export const ProtectedRoute: React.FC<{
   children: React.ReactNode;
   allowedRoles?: string[];
 }> = ({ children, allowedRoles }) => {
-  const { hasRole } = useAuth();
+  const { user, token, isLoading, hasRole } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: '4rem', display: 'flex', justifyContent: 'center' }}>
+        <LoadingSpinner label="Verifying authentication session..." />
+      </div>
+    );
+  }
+
+  if (!token || !user || !isJwtTokenValid(token)) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
 
   if (allowedRoles && !hasRole(allowedRoles)) {
     return <Navigate to="/dashboard" replace />;
@@ -49,14 +70,19 @@ export const ProtectedRoute: React.FC<{
   return <>{children}</>;
 };
 
+const PublicLoginRoute: React.FC = () => {
+  const { user, token } = useAuth();
+  if (token && user && isJwtTokenValid(token)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <LoginPage />;
+};
+
 export const AppRoutes: React.FC = () => {
   return (
     <Routes>
-      {/* Public Login Route - Bypassed directly to Dashboard */}
-      <Route
-        path="/login"
-        element={<Navigate to="/dashboard" replace />}
-      />
+      {/* Public Login Route */}
+      <Route path="/login" element={<PublicLoginRoute />} />
 
       {/* Root redirect */}
       <Route
@@ -96,7 +122,7 @@ export const AppRoutes: React.FC = () => {
               moduleName="Material Categories"
               category="Master Data"
               description="Taxonomy and grouping structure for construction inventories."
-              targetPrompt="Prompt 2"
+              targetPrompt="Master Data"
               businessCapabilities={[
                 'Hierarchical material categories and subcategories',
                 'Default valuation and storage temperature rules',
@@ -115,7 +141,7 @@ export const AppRoutes: React.FC = () => {
               moduleName="Units of Measure (UoM)"
               category="Master Data"
               description="Standardized engineering metrics and dual-unit packaging conversion factors."
-              targetPrompt="Prompt 2"
+              targetPrompt="Master Data"
               businessCapabilities={[
                 'Base units (MT, Bags, Lengths, Pcs, SqM, CuM)',
                 'Precision conversion factors with strict decimal rounding',
@@ -152,7 +178,7 @@ export const AppRoutes: React.FC = () => {
               moduleName="Construction Projects"
               category="Master Data"
               description="Multi-project portfolio, cost centers, and site staging boundaries."
-              targetPrompt="Prompt 2"
+              targetPrompt="Master Data"
               businessCapabilities={[
                 'Multi-project boundary scoping',
                 'Assigned Project Managers and site controllers',
@@ -171,7 +197,7 @@ export const AppRoutes: React.FC = () => {
               moduleName="Warehouses & Site Yards"
               category="Master Data"
               description="Central holding yards, on-site storage sheds, and transit hubs."
-              targetPrompt="Prompt 2"
+              targetPrompt="Master Data"
               businessCapabilities={[
                 'Location and staging yard definitions',
                 'Designated Storekeeper access assignments',
@@ -197,6 +223,15 @@ export const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']}>
             <RequisitionFormPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/requisitions/create"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']}>
+            <Navigate to="/requisitions/new" replace />
           </ProtectedRoute>
         }
       />
@@ -295,12 +330,12 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/pending-deliveries"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']}>
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'Storekeeper', 'ProjectManager']}>
             <ModulePlaceholderPage
               moduleName="Pending Deliveries"
               category="Procurement"
               description="Supplier shipment dispatch monitoring and site gate arrival scheduling."
-              targetPrompt="Prompt 5"
+              targetPrompt="Procurement"
               businessCapabilities={[
                 'In-transit supplier tracking',
                 'Expected delivery date monitoring',
@@ -394,21 +429,66 @@ export const AppRoutes: React.FC = () => {
         }
       />
 
+      {/* Stock Transfers & In-Transit Inventory */}
       <Route
         path="/stock-transfers"
         element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+            <StockTransferListPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/stock-transfers/new"
+        element={
           <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
-            <ModulePlaceholderPage
-              moduleName="Inter-Site Stock Transfers"
-              category="Inventory & Stock"
-              description="3-stage custody stock transfers between project locations."
-              targetPrompt="Prompt 6"
-              businessCapabilities={[
-                'Stage 1: Source dispatch quantity reduction',
-                'Stage 2: In-transit custody lock',
-                'Stage 3: Destination receipt inspection and atomic addition',
-              ]}
-            />
+            <StockTransferFormPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/stock-transfers/in-transit"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+            <InTransitInventoryPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/inventory/in-transit"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+            <InTransitInventoryPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/stock-transfers/discrepancies"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+            <TransferDiscrepancyQueuePage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/stock-transfers/:id/edit"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+            <StockTransferFormPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/stock-transfers/:id"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+            <StockTransferDetailPage />
           </ProtectedRoute>
         }
       />
@@ -478,22 +558,12 @@ export const AppRoutes: React.FC = () => {
         }
       />
 
-      {/* Reports & Valuation */}
+      {/* Reports, Exports & Notifications */}
       <Route
         path="/reports"
         element={
           <ProtectedRoute>
-            <ModulePlaceholderPage
-              moduleName="Stock Summary Reports"
-              category="Reports & Valuation"
-              description="Comprehensive stock reports, turnover analysis, and inventory distribution."
-              targetPrompt="Prompt 6"
-              businessCapabilities={[
-                'Organization-wide inventory summary',
-                'Slow-moving and dead stock identification',
-                'Excel (.xlsx) and PDF statement generation',
-              ]}
-            />
+            <ReportsCenterPage />
           </ProtectedRoute>
         }
       />
@@ -511,17 +581,16 @@ export const AppRoutes: React.FC = () => {
         path="/reports/consumption"
         element={
           <ProtectedRoute>
-            <ModulePlaceholderPage
-              moduleName="Material Consumption Analytics"
-              category="Reports & Valuation"
-              description="Material consumption rates compared against Bill of Quantities (BOQ) benchmarks."
-              targetPrompt="Prompt 6"
-              businessCapabilities={[
-                'Actual vs Estimated consumption metrics',
-                'Site waste percentage tracking',
-                'Project stage cost variance',
-              ]}
-            />
+            <ReportsCenterPage defaultReportType="consumption-issues-returns" />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsCenterPage />
           </ProtectedRoute>
         }
       />
@@ -544,7 +613,7 @@ export const AppRoutes: React.FC = () => {
               moduleName="System Settings"
               category="Administration"
               description="System configuration, numbering series prefixes, and session policy parameters."
-              targetPrompt="Prompt 6"
+              targetPrompt="Administration"
               businessCapabilities={[
                 'Document number prefixes (GRN-, REQ-, PO-, TRF-)',
                 'Session inactivity timeout parameters',

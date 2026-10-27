@@ -59,12 +59,12 @@ export const RequisitionListPage: React.FC = () => {
 
   const isApprover = hasRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']);
 
-  // Fetch initial data
+  // Fetch initial data with independent degradation for filter catalog vs requisition list
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [projList, reqList] = await Promise.all([
+      const [projResult, reqResult] = await Promise.allSettled([
         requisitionService.getProjects(),
         requisitionService.getRequisitions({
           search: searchQuery || undefined,
@@ -73,8 +73,33 @@ export const RequisitionListPage: React.FC = () => {
           pageSize: 100,
         }),
       ]);
-      setProjects(projList);
-      setRequisitions(reqList.items || []);
+
+      if (projResult.status === 'fulfilled') {
+        setProjects(Array.isArray(projResult.value) ? projResult.value : []);
+      } else {
+        console.error('Failed to load project filter options (/api/v1/projects):', projResult.reason);
+      }
+
+      if (reqResult.status === 'fulfilled') {
+        setRequisitions(reqResult.value?.items || []);
+        if (projResult.status === 'rejected') {
+          setActionMessage({
+            type: 'error',
+            text: `Project filter options unavailable (/api/v1/projects): ${projResult.reason?.message || 'Request failed'}`,
+          });
+        }
+      } else {
+        const reqReason = reqResult.reason;
+        const projFailureSuffix =
+          projResult.status === 'rejected'
+            ? ` (Project catalog GET /api/v1/projects also failed: ${projResult.reason?.message || 'Unknown error'})`
+            : '';
+        setError(
+          `Failed to load requisitions (GET /api/v1/requisitions): ${
+            reqReason?.message || 'Failed to communicate with construction inventory backend'
+          }${projFailureSuffix}`
+        );
+      }
     } catch (err: any) {
       console.error('Failed to load requisitions:', err);
       setError(err?.message || 'Failed to communicate with construction inventory backend');

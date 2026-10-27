@@ -691,22 +691,22 @@ export const RequisitionDetailPage: React.FC = () => {
                 <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Approval Audit Trail</h3>
               </div>
               <span style={{ fontSize: '0.75rem', color: 'var(--color-charcoal-500)' }}>
-                {requisition.approvalHistory.length} event{requisition.approvalHistory.length === 1 ? '' : 's'}
+                {(requisition.approvalHistory || []).length} event{(requisition.approvalHistory || []).length === 1 ? '' : 's'}
               </span>
             </div>
 
             {/* Timeline View */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              {requisition.approvalHistory.map((entry, idx) => (
+              {(requisition.approvalHistory || []).map((entry, idx) => (
                 <div
                   key={entry.id || idx}
                   style={{
                     display: 'flex',
                     gap: 'var(--space-2)',
                     position: 'relative',
-                    paddingBottom: idx === requisition.approvalHistory.length - 1 ? 0 : 'var(--space-3)',
+                    paddingBottom: idx === (requisition.approvalHistory || []).length - 1 ? 0 : 'var(--space-3)',
                     borderLeft:
-                      idx === requisition.approvalHistory.length - 1
+                      idx === (requisition.approvalHistory || []).length - 1
                         ? '2px solid transparent'
                         : '2px solid var(--color-border-subtle)',
                     marginLeft: 'var(--space-2)',

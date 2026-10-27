@@ -341,39 +341,8 @@ export interface AuthenticatedRequest extends Request {
   user?: JwtPayload;
 }
 
-function getBypassAdminPayload(customUserId?: string): JwtPayload {
-  const targetUser = (customUserId && enterpriseUsers.find((u) => u.id === customUserId || u.username === customUserId || u.email === customUserId))
-    || enterpriseUsers[0];
-  const now = Math.floor(Date.now() / 1000);
-  return {
-    sub: targetUser.id,
-    email: targetUser.email,
-    username: targetUser.username,
-    fullName: targetUser.fullName,
-    roles: targetUser.roles,
-    projectScopes: targetUser.projectScopes,
-    warehouseScopes: targetUser.warehouseScopes,
-    iss: JWT_ISSUER,
-    aud: JWT_AUDIENCE,
-    iat: now,
-    exp: now + 3600,
-  };
-}
-
 function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers['authorization'];
-  const bypassHeader = req.headers['x-bypass-auth'];
-
-  // Support explicit auth bypass token or header so frontend works seamlessly without login
-  if (bypassHeader === 'true' || (authHeader && authHeader.startsWith('Bearer bypass-token'))) {
-    const customUserId = typeof req.headers['x-bypass-user'] === 'string'
-      ? req.headers['x-bypass-user']
-      : authHeader?.startsWith('Bearer bypass-token:')
-      ? authHeader.substring('Bearer bypass-token:'.length)
-      : undefined;
-    req.user = getBypassAdminPayload(customUserId);
-    return next();
-  }
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
@@ -531,26 +500,9 @@ function setupApiRoutes(router: express.Router) {
       });
     } catch (err) {
       console.error('[ConstructionStock] Login route error:', err);
-      const fallbackUser = enterpriseUsers[0];
-      const token = generateJwt(fallbackUser);
-      return res.status(200).json({
-        success: true,
-        message: 'Login successful (Fallback Session)',
-        data: {
-          accessToken: token,
-          expiresInSeconds: 3600,
-          user: {
-            id: fallbackUser.id,
-            username: fallbackUser.username,
-            email: fallbackUser.email,
-            fullName: fallbackUser.fullName,
-            isActive: fallbackUser.isActive,
-            roles: fallbackUser.roles,
-            projectScopes: fallbackUser.projectScopes,
-            warehouseScopes: fallbackUser.warehouseScopes,
-            lastLoginAtUtc: new Date().toISOString(),
-          },
-        },
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error during authentication',
         timestampUtc: new Date().toISOString(),
       });
     }
@@ -568,7 +520,7 @@ function setupApiRoutes(router: express.Router) {
 
   // GET /api/auth/me
   router.get('/auth/me', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
-    const user = enterpriseUsers.find((u) => u.id === req.user?.sub) || enterpriseUsers[0];
+    const user = enterpriseUsers.find((u) => u.id === req.user?.sub);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -1562,6 +1514,30 @@ function setupApiRoutes(router: express.Router) {
     return `${prefix}${nextSeq}`;
   }
 
+  function normalizeRequisitionRecord(r: RequisitionRecord): RequisitionRecord {
+    const projects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
+    const matchedProject = projects.find(p => p.id === r.projectId);
+    return {
+      ...r,
+      projectCode: r.projectCode || matchedProject?.code || r.projectId || 'PRJ-000',
+      projectName: r.projectName || matchedProject?.name || 'Project Site',
+      requesterName: r.requesterName || 'Site User',
+      requesterRole: r.requesterRole || 'SiteEngineer',
+      priority: r.priority || 'Medium',
+      purpose: r.purpose || 'Site construction material requirement',
+      items: (r.items || []).map(it => ({
+        ...it,
+        materialCode: it.materialCode || it.materialId || 'MAT',
+        materialName: it.materialName || 'Material Item',
+        categoryId: it.categoryId || 'CAT-GEN',
+        categoryName: it.categoryName || 'General',
+        unitId: it.unitId || 'UOM-UNIT',
+        unitCode: it.unitCode || 'UNIT',
+      })),
+      approvalHistory: Array.isArray(r.approvalHistory) ? r.approvalHistory : [],
+    };
+  }
+
   // --- API: List Projects (GET /api/projects) ---
   router.get('/projects', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
     const projects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
@@ -1575,9 +1551,66 @@ function setupApiRoutes(router: express.Router) {
     });
   });
 
+  // --- API: List Warehouses / Site Stores (GET /api/warehouses) ---
+  router.get('/warehouses', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const projects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
+    const balances = readJsonSafe<Array<{ projectId: string; availableQuantity?: number; quantityOnHand?: number }>>(inventoryBalancesFile, []);
+    const user = req.user!;
+    const accessibleProjects = projects.filter(p => p.isActive && canUserAccessProject(user, p.id));
+
+    const warehouses = [
+      {
+        id: 'WH-01',
+        code: 'WH-CENTRAL-01',
+        name: 'Central Distribution Yard & Main Store',
+        type: 'Central Warehouse',
+        projectId: 'PRJ-101',
+        projectName: 'Metro Rail Line 3 Extension',
+        location: 'Industrial Logistics Zone, Sector 4',
+        isActive: true,
+        skuCount: balances.filter(b => b.projectId === 'PRJ-101' && (b.availableQuantity ?? b.quantityOnHand ?? 0) > 0).length,
+      },
+      ...accessibleProjects.map((p, idx) => ({
+        id: `WH-0${idx + 2}`,
+        code: `WH-${p.code.replace('PRJ-', 'SITE-')}`,
+        name: `${p.name} — Site Store`,
+        type: 'Project Site Store',
+        projectId: p.id,
+        projectName: p.name,
+        location: p.location,
+        isActive: p.isActive,
+        skuCount: balances.filter(b => b.projectId === p.id && (b.availableQuantity ?? b.quantityOnHand ?? 0) > 0).length,
+      })),
+    ];
+
+    return res.status(200).json({
+      success: true,
+      data: warehouses,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // --- API: System Settings & Valuation Policy (GET /api/settings) ---
+  router.get('/settings', authMiddleware, (_req: AuthenticatedRequest, res: Response) => {
+    return res.status(200).json({
+      success: true,
+      data: {
+        valuationPolicy: 'WEIGHTED_AVERAGE_COST',
+        valuationDescription: 'Moving Weighted Average Cost (WAC) per Project & Material',
+        negativeStockAllowed: false,
+        selfApprovalAllowed: false,
+        requireGrnInspectionBeforePosting: true,
+        jwtExpirySeconds: 3600,
+        currency: 'USD',
+        auditTrailRetentionDays: 3650,
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
   // --- API: List Requisitions with filters and pagination (GET /api/requisitions) ---
   router.get('/requisitions', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
-    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []).map(normalizeRequisitionRecord);
     const user = req.user!;
     const { search, status, projectId, page = '1', pageSize = '20' } = req.query;
 
@@ -1598,13 +1631,13 @@ function setupApiRoutes(router: express.Router) {
     if (search && typeof search === 'string') {
       const term = search.trim().toUpperCase();
       filtered = filtered.filter(r =>
-        r.requisitionNumber.toUpperCase().includes(term) ||
-        r.projectName.toUpperCase().includes(term) ||
-        r.projectCode.toUpperCase().includes(term) ||
-        r.requesterName.toUpperCase().includes(term) ||
-        r.purpose.toUpperCase().includes(term) ||
+        (r.requisitionNumber || '').toUpperCase().includes(term) ||
+        (r.projectName || '').toUpperCase().includes(term) ||
+        (r.projectCode || '').toUpperCase().includes(term) ||
+        (r.requesterName || '').toUpperCase().includes(term) ||
+        (r.purpose || '').toUpperCase().includes(term) ||
         (r.workActivity && r.workActivity.toUpperCase().includes(term)) ||
-        r.items.some(i => i.materialName.toUpperCase().includes(term) || i.materialCode.toUpperCase().includes(term))
+        (r.items || []).some(i => (i.materialName || '').toUpperCase().includes(term) || (i.materialCode || '').toUpperCase().includes(term))
       );
     }
 
@@ -1634,7 +1667,7 @@ function setupApiRoutes(router: express.Router) {
 
   // --- API: Pending Approval Inbox (GET /api/approvals/inbox) ---
   router.get('/approvals/inbox', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
-    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []).map(normalizeRequisitionRecord);
     const user = req.user!;
 
     const pendingApprovals = requisitions.filter(r =>
@@ -1652,7 +1685,7 @@ function setupApiRoutes(router: express.Router) {
 
   // --- API: Get Single Requisition (GET /api/requisitions/:id) ---
   router.get('/requisitions/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
-    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []).map(normalizeRequisitionRecord);
     const user = req.user!;
     const requisition = requisitions.find(r => r.id === req.params.id || r.requisitionNumber === req.params.id);
 
@@ -2733,6 +2766,8 @@ function setupApiRoutes(router: express.Router) {
     materialCode: string;
     materialName: string;
     unitCode: string;
+    sourceLocationId?: string;
+    destinationLocationId?: string;
     requestedQuantity: number;
     approvedQuantity: number;
     dispatchedQuantity: number;
@@ -2745,10 +2780,16 @@ function setupApiRoutes(router: express.Router) {
     totalDispatchedAmount: number;
     sourceStockLedgerEntryId?: string;
     destinationStockLedgerEntryId?: string;
+    destinationStockLedgerEntryIds?: string[];
     discrepancyReason?: string;
     inspectionNotes?: string;
+    evidenceReferences?: string[];
     resolutionStatus?: 'Pending' | 'Resolved' | 'None';
+    resolutionAction?: 'WriteOffApproved' | 'ClaimFiled' | 'CountCorrected' | 'AcceptedAsIs' | 'Resolved';
     resolutionNotes?: string;
+    resolvedByUserId?: string;
+    resolvedByName?: string;
+    resolvedAtUtc?: string;
   }
 
   interface StockTransferAuditRecord {
@@ -2798,6 +2839,8 @@ function setupApiRoutes(router: express.Router) {
     destinationWarehouseName: string;
     destinationProjectId: string;
     destinationProjectName: string;
+    isCrossProject?: boolean;
+    isCrossWarehouse?: boolean;
     requestDate: string; // YYYY-MM-DD
     plannedDispatchDate?: string;
     actualDispatchDate?: string;
@@ -2805,13 +2848,19 @@ function setupApiRoutes(router: express.Router) {
     actualReceiptDate?: string;
     purpose: string;
     transferReason?: string;
+    referenceNumber?: string;
+    vehicleNumber?: string;
+    driverName?: string;
+    dispatchReference?: string;
     priority: 'Low' | 'Medium' | 'High' | 'Urgent';
     status: TransferStatus;
     discrepancyStatus?: 'None' | 'PendingReview' | 'Resolved';
+    postingJournalStatus?: 'None' | 'PendingDispatch' | 'Dispatched' | 'PendingReceipt' | 'Reconciled' | 'Completed';
     items: StockTransferItemRecord[];
     auditTrail: StockTransferAuditRecord[];
     rejectionReason?: string;
     correctionNotes?: string;
+    cancellationReason?: string;
     remarks?: string;
     createdByUserId: string;
     createdByName: string;
@@ -2828,6 +2877,12 @@ function setupApiRoutes(router: express.Router) {
     receivedByUserId?: string;
     receivedByName?: string;
     receivedAtUtc?: string;
+    inspectedByUserId?: string;
+    inspectedByName?: string;
+    inspectedAtUtc?: string;
+    cancelledByUserId?: string;
+    cancelledByName?: string;
+    cancelledAtUtc?: string;
     completedByUserId?: string;
     completedByName?: string;
     completedAtUtc?: string;
@@ -7680,6 +7735,27 @@ function setupApiRoutes(router: express.Router) {
     return `${yearPrefix}${(maxSeq + 1).toString().padStart(4, '0')}`;
   }
 
+  function resolveWarehouseName(warehouseId: string): string {
+    if (warehouseId === 'WH-01') return 'Metro Central Staging Yard';
+    if (warehouseId === 'WH-02') return 'North Industrial Depot & Yard';
+    if (warehouseId === 'WH-03') return 'East Harbor Hub';
+    return warehouseId;
+  }
+
+  function resolveProjectName(projectId: string): string {
+    if (projectId === 'PRJ-101') return 'Metro Rail Line 3 Extension';
+    if (projectId === 'PRJ-102') return 'Harbor Commercial Docklands';
+    if (projectId === 'PRJ-103') return 'Skyline Corporate Towers';
+    return projectId;
+  }
+
+  function canUserAccessEitherTransferLocation(user: JwtPayload, transfer: StockTransferRecord): boolean {
+    return (
+      canUserAccessLocation(user, transfer.sourceProjectId, transfer.sourceWarehouseId) ||
+      canUserAccessLocation(user, transfer.destinationProjectId, transfer.destinationWarehouseId)
+    );
+  }
+
   function postStockTransferDispatchToLedger(
     transfer: StockTransferRecord,
     user: JwtPayload,
@@ -7712,10 +7788,16 @@ function setupApiRoutes(router: express.Router) {
         );
       }
 
-      const available = sourceBal ? sourceBal.quantityOnHand : 0;
-      if (!sourceBal || available < dispatchedQty) {
+      const available = sourceBal
+        ? sourceBal.quantityAvailable !== undefined
+          ? Math.min(sourceBal.quantityOnHand, Math.max(0, sourceBal.quantityOnHand - (sourceBal.quantityReserved || 0)))
+          : sourceBal.quantityOnHand
+        : 0;
+      const onHand = sourceBal ? sourceBal.quantityOnHand : 0;
+
+      if (!sourceBal || onHand < dispatchedQty) {
         throw new Error(
-          `Insufficient available stock at source location '${transfer.sourceWarehouseName}'. Required: ${dispatchedQty} ${item.unitCode}, Available: ${available} ${item.unitCode} for '${item.materialName}'.`
+          `Insufficient available stock at source location '${transfer.sourceWarehouseName}'. Required: ${dispatchedQty} ${item.unitCode}, Available: ${onHand} ${item.unitCode} for '${item.materialName}'.`
         );
       }
 
@@ -7766,47 +7848,50 @@ function setupApiRoutes(router: express.Router) {
         stockLedger.unshift(ledgerEntry);
         item.sourceStockLedgerEntryId = entryId;
 
-        // Reduce Source Location Balance
+        // Reduce Source Location Balance (On Hand & Available)
         sourceBal.quantityOnHand = newBalQty;
+        sourceBal.quantityAvailable = round2(Math.max(0, newBalQty - (sourceBal.quantityReserved || 0)));
         sourceBal.inventoryValue = newTotalVal;
         sourceBal.lastUpdatedUtc = nowUtc;
         sourceBal.version = (sourceBal.version || 1) + 1;
+
+        // 3. Track In-Transit Quantity at Destination Location Balance (idempotent with ledger entry)
+        let destBal = inventoryBalances.find(
+          (b) =>
+            (b.materialId === item.materialId || b.materialCode === item.materialCode) &&
+            b.warehouseId === transfer.destinationWarehouseId &&
+            b.projectId === transfer.destinationProjectId
+        );
+
+        if (!destBal) {
+          destBal = {
+            id: `BAL-DST-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`,
+            materialId: item.materialId,
+            materialCode: item.materialCode,
+            materialName: item.materialName,
+            unitCode: item.unitCode,
+            warehouseId: transfer.destinationWarehouseId,
+            warehouseName: transfer.destinationWarehouseName,
+            projectId: transfer.destinationProjectId,
+            projectName: transfer.destinationProjectName,
+            quantityOnHand: 0,
+            quantityReserved: 0,
+            quantityAvailable: 0,
+            quantityInTransit: 0,
+            weightedAverageCost: unitCost,
+            inventoryValue: 0,
+            version: 1,
+            lastUpdatedUtc: nowUtc,
+          };
+          inventoryBalances.push(destBal);
+        }
+
+        destBal.quantityInTransit = round2((destBal.quantityInTransit || 0) + dispatchedQty);
+        destBal.lastUpdatedUtc = nowUtc;
       }
 
-      // 3. Track In-Transit Quantity at Destination Location Balance
-      let destBal = inventoryBalances.find(
-        (b) =>
-          (b.materialId === item.materialId || b.materialCode === item.materialCode) &&
-          b.warehouseId === transfer.destinationWarehouseId &&
-          b.projectId === transfer.destinationProjectId
-      );
-
-      if (!destBal) {
-        destBal = {
-          id: `BAL-DST-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`,
-          materialId: item.materialId,
-          materialCode: item.materialCode,
-          materialName: item.materialName,
-          unitCode: item.unitCode,
-          warehouseId: transfer.destinationWarehouseId,
-          warehouseName: transfer.destinationWarehouseName,
-          projectId: transfer.destinationProjectId,
-          projectName: transfer.destinationProjectName,
-          quantityOnHand: 0,
-          quantityReserved: 0,
-          quantityAvailable: 0,
-          quantityInTransit: 0,
-          weightedAverageCost: unitCost,
-          inventoryValue: 0,
-          version: 1,
-          lastUpdatedUtc: nowUtc,
-        };
-        inventoryBalances.push(destBal);
-      }
-
-      destBal.quantityInTransit = round2((destBal.quantityInTransit || 0) + dispatchedQty);
-      destBal.lastUpdatedUtc = nowUtc;
-
+      item.sourceLocationId = `${transfer.sourceProjectId}:${transfer.sourceWarehouseId}`;
+      item.destinationLocationId = `${transfer.destinationProjectId}:${transfer.destinationWarehouseId}`;
       item.unitCostAtDispatch = unitCost;
       item.totalDispatchedAmount = totalAmount;
       item.dispatchedQuantity = dispatchedQty;
@@ -7824,7 +7909,8 @@ function setupApiRoutes(router: express.Router) {
     nowUtc: string,
     stockLedger: StockLedgerRecord[],
     inventoryBalances: InventoryBalanceRecord[],
-    materials: MaterialRecord[]
+    materials: MaterialRecord[],
+    lineDeltas?: Record<string, { deltaGood: number; deltaAccounted: number }>
   ) {
     let receivedCount = 0;
 
@@ -7837,6 +7923,24 @@ function setupApiRoutes(router: express.Router) {
       const totalAccounted = round2(goodQty + damagedQty + shortQty + disputedQty);
 
       if (totalAccounted <= 0) continue;
+
+      // Calculate already-posted good quantity for this transfer line from stockLedger
+      const existingTransferInEntries = stockLedger.filter(
+        (e) =>
+          e.transactionType === 'TransferIn' &&
+          e.sourceDocumentId === transfer.id &&
+          e.sourceLineId === item.id
+      );
+      const alreadyPostedGood = round2(
+        existingTransferInEntries.reduce((sum, e) => sum + (e.quantityIn || 0), 0)
+      );
+
+      const deltaGood = lineDeltas?.[item.id]
+        ? lineDeltas[item.id].deltaGood
+        : round2(Math.max(0, goodQty - alreadyPostedGood));
+      const deltaAccounted = lineDeltas?.[item.id]
+        ? lineDeltas[item.id].deltaAccounted
+        : totalAccounted;
 
       const unitCost = item.unitCostAtDispatch || 0;
 
@@ -7871,18 +7975,19 @@ function setupApiRoutes(router: express.Router) {
         inventoryBalances.push(destBal);
       }
 
-      // 1. Post Inbound Good Quantity to Stock Ledger
-      if (goodQty > 0) {
-        const idempotencyKey = `STF_RECEIPT_${transfer.id}_ITEM_${item.id}_${goodQty}`;
+      // 1. Post Inbound Good Quantity Delta to Stock Ledger
+      if (deltaGood > 0) {
+        const batchSeq = existingTransferInEntries.length + 1;
+        const idempotencyKey = `STF_RECEIPT_${transfer.id}_ITEM_${item.id}_CUM_${goodQty}_BATCH_${batchSeq}`;
         if (!stockLedger.some((e) => e.idempotencyKey === idempotencyKey)) {
           const entryId = `STK-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
           const refNum = `STK-${new Date().getFullYear()}-${(stockLedger.length + 1).toString().padStart(4, '0')}`;
 
           const oldOnHand = destBal.quantityOnHand || 0;
           const oldValuation = destBal.inventoryValue || 0;
-          const incomingValue = round2(goodQty * unitCost);
+          const incomingValue = round2(deltaGood * unitCost);
 
-          const newOnHand = round2(oldOnHand + goodQty);
+          const newOnHand = round2(oldOnHand + deltaGood);
           const newValuation = round2(oldValuation + incomingValue);
           const newWac = newOnHand > 0 ? round4(newValuation / newOnHand) : unitCost;
 
@@ -7902,9 +8007,9 @@ function setupApiRoutes(router: express.Router) {
             warehouseName: transfer.destinationWarehouseName,
             projectId: transfer.destinationProjectId,
             projectName: transfer.destinationProjectName,
-            quantityIn: goodQty,
+            quantityIn: deltaGood,
             quantityOut: 0,
-            signedQuantity: goodQty,
+            signedQuantity: deltaGood,
             unitCost,
             transactionValue: incomingValue,
             balanceQuantityAfter: newOnHand,
@@ -7920,18 +8025,25 @@ function setupApiRoutes(router: express.Router) {
 
           stockLedger.unshift(ledgerEntry);
           item.destinationStockLedgerEntryId = entryId;
+          if (!Array.isArray(item.destinationStockLedgerEntryIds)) {
+            item.destinationStockLedgerEntryIds = [];
+          }
+          item.destinationStockLedgerEntryIds.push(entryId);
 
-          // Update destination stock on hand
+          // Update destination stock on hand & available
           destBal.quantityOnHand = newOnHand;
+          destBal.quantityAvailable = round2(Math.max(0, newOnHand - (destBal.quantityReserved || 0)));
           destBal.weightedAverageCost = newWac;
           destBal.inventoryValue = newValuation;
         }
       }
 
-      // 2. Reduce In-Transit Quantity by total accounted
-      destBal.quantityInTransit = Math.max(0, round2((destBal.quantityInTransit || 0) - totalAccounted));
-      destBal.lastUpdatedUtc = nowUtc;
-      destBal.version = (destBal.version || 1) + 1;
+      // 2. Reduce In-Transit Quantity by newly accounted delta
+      if (deltaAccounted > 0) {
+        destBal.quantityInTransit = Math.max(0, round2((destBal.quantityInTransit || 0) - deltaAccounted));
+        destBal.lastUpdatedUtc = nowUtc;
+        destBal.version = (destBal.version || 1) + 1;
+      }
 
       // Update remaining in-transit quantity on transfer item
       item.remainingInTransitQuantity = Math.max(
@@ -7949,13 +8061,9 @@ function setupApiRoutes(router: express.Router) {
   router.get('/stock-transfers', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
     const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
     const user = req.user!;
-    const { search, status, sourceWarehouseId, destinationWarehouseId, projectId, page, pageSize } = req.query;
+    const { search, status, sourceWarehouseId, destinationWarehouseId, projectId, hasDiscrepancy, page, pageSize } = req.query;
 
-    let filtered = transfers.filter(
-      (t) =>
-        canUserAccessLocation(user, t.sourceProjectId, t.sourceWarehouseId) ||
-        canUserAccessLocation(user, t.destinationProjectId, t.destinationWarehouseId)
-    );
+    let filtered = transfers.filter((t) => canUserAccessEitherTransferLocation(user, t));
 
     if (search && typeof search === 'string') {
       const term = search.trim().toUpperCase();
@@ -7965,6 +8073,7 @@ function setupApiRoutes(router: express.Router) {
           t.sourceWarehouseName.toUpperCase().includes(term) ||
           t.destinationWarehouseName.toUpperCase().includes(term) ||
           t.purpose.toUpperCase().includes(term) ||
+          (t.referenceNumber && t.referenceNumber.toUpperCase().includes(term)) ||
           t.items.some((it) => it.materialCode.toUpperCase().includes(term) || it.materialName.toUpperCase().includes(term))
       );
     }
@@ -7983,6 +8092,15 @@ function setupApiRoutes(router: express.Router) {
 
     if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
       filtered = filtered.filter((t) => t.sourceProjectId === projectId || t.destinationProjectId === projectId);
+    }
+
+    if (hasDiscrepancy === 'true') {
+      filtered = filtered.filter(
+        (t) =>
+          t.discrepancyStatus === 'PendingReview' ||
+          t.discrepancyStatus === 'Resolved' ||
+          t.items.some((it) => (it.damagedQuantity || 0) > 0 || (it.shortQuantity || 0) > 0 || (it.disputedQuantity || 0) > 0)
+      );
     }
 
     filtered.sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
@@ -8014,16 +8132,13 @@ function setupApiRoutes(router: express.Router) {
     });
   });
 
-  // GET /api/stock-transfers/discrepancies (Scoped Unresolved Discrepancy Queue)
+  // GET /api/stock-transfers/discrepancies (Scoped Unresolved & Resolved Discrepancy Queue)
   router.get('/stock-transfers/discrepancies', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
     const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
     const user = req.user!;
+    const includeResolved = req.query.includeResolved === 'true';
 
-    const accessible = transfers.filter(
-      (t) =>
-        canUserAccessLocation(user, t.sourceProjectId, t.sourceWarehouseId) ||
-        canUserAccessLocation(user, t.destinationProjectId, t.destinationWarehouseId)
-    );
+    const accessible = transfers.filter((t) => canUserAccessEitherTransferLocation(user, t));
 
     const discrepancies: any[] = [];
 
@@ -8034,15 +8149,25 @@ function setupApiRoutes(router: express.Router) {
         const hasDispute = (item.disputedQuantity || 0) > 0;
         const isPending = item.resolutionStatus === 'Pending' || t.discrepancyStatus === 'PendingReview';
 
-        if ((hasDamage || hasShortage || hasDispute || item.discrepancyReason) && isPending) {
+        if ((hasDamage || hasShortage || hasDispute || item.discrepancyReason) && (isPending || includeResolved)) {
           discrepancies.push({
             id: `DISC-STF-${item.id}`,
+            lineId: item.id,
             stockTransferId: t.id,
             transferNumber: t.transferNumber,
+            transferStatus: t.status,
             materialId: item.materialId,
             materialCode: item.materialCode,
             materialName: item.materialName,
             unitCode: item.unitCode,
+            sourceWarehouseId: t.sourceWarehouseId,
+            sourceWarehouseName: t.sourceWarehouseName,
+            sourceProjectId: t.sourceProjectId,
+            sourceProjectName: t.sourceProjectName,
+            destinationWarehouseId: t.destinationWarehouseId,
+            destinationWarehouseName: t.destinationWarehouseName,
+            destinationProjectId: t.destinationProjectId,
+            destinationProjectName: t.destinationProjectName,
             sourceLocation: `${t.sourceWarehouseName} (${t.sourceProjectName})`,
             destinationLocation: `${t.destinationWarehouseName} (${t.destinationProjectName})`,
             dispatchedQuantity: item.dispatchedQuantity,
@@ -8050,10 +8175,18 @@ function setupApiRoutes(router: express.Router) {
             damagedQuantity: item.damagedQuantity,
             shortQuantity: item.shortQuantity,
             disputedQuantity: item.disputedQuantity,
+            remainingInTransitQuantity: item.remainingInTransitQuantity || 0,
+            unitCostAtDispatch: item.unitCostAtDispatch || 0,
+            varianceValue: round2(((item.damagedQuantity || 0) + (item.shortQuantity || 0) + (item.disputedQuantity || 0)) * (item.unitCostAtDispatch || 0)),
             discrepancyReason: item.discrepancyReason || 'Quantity discrepancy reported upon site receipt inspection',
             inspectionNotes: item.inspectionNotes || '',
+            evidenceReferences: item.evidenceReferences || [],
             resolutionStatus: item.resolutionStatus || 'Pending',
-            reportedBy: t.receivedByUserId ? 'Receiving Storekeeper' : 'Inspector',
+            resolutionAction: item.resolutionAction,
+            resolutionNotes: item.resolutionNotes,
+            resolvedByName: item.resolvedByName,
+            resolvedAtUtc: item.resolvedAtUtc,
+            reportedBy: t.receivedByName || (t.receivedByUserId ? 'Receiving Storekeeper' : 'Inspector'),
             reportedAtUtc: t.actualReceiptDate || t.updatedAtUtc || t.createdAtUtc,
           });
         }
@@ -8075,16 +8208,18 @@ function setupApiRoutes(router: express.Router) {
     const inTransitTransfers = transfers.filter(
       (t) =>
         (t.status === 'Dispatched' || t.status === 'PartiallyReceived') &&
-        (canUserAccessLocation(user, t.sourceProjectId, t.sourceWarehouseId) ||
-          canUserAccessLocation(user, t.destinationProjectId, t.destinationWarehouseId))
+        canUserAccessEitherTransferLocation(user, t)
     );
 
     const itemsSummary: any[] = [];
 
     for (const t of inTransitTransfers) {
       for (const item of t.items) {
-        if ((item.remainingInTransitQuantity || item.dispatchedQuantity) > 0) {
+        const remQty = item.remainingInTransitQuantity !== undefined ? item.remainingInTransitQuantity : item.dispatchedQuantity;
+        if (remQty > 0) {
           itemsSummary.push({
+            id: `${t.id}-${item.id}`,
+            lineId: item.id,
             stockTransferId: t.id,
             transferNumber: t.transferNumber,
             materialId: item.materialId,
@@ -8101,11 +8236,18 @@ function setupApiRoutes(router: express.Router) {
             destinationProjectName: t.destinationProjectName,
             dispatchedQuantity: item.dispatchedQuantity,
             receivedGoodQuantity: item.receivedGoodQuantity,
-            remainingInTransitQuantity: item.remainingInTransitQuantity || item.dispatchedQuantity,
+            damagedQuantity: item.damagedQuantity || 0,
+            shortQuantity: item.shortQuantity || 0,
+            disputedQuantity: item.disputedQuantity || 0,
+            remainingInTransitQuantity: remQty,
             unitCostAtDispatch: item.unitCostAtDispatch,
-            totalInTransitValue: round2((item.remainingInTransitQuantity || item.dispatchedQuantity) * item.unitCostAtDispatch),
+            totalInTransitValue: round2(remQty * item.unitCostAtDispatch),
             actualDispatchDate: t.actualDispatchDate,
             expectedArrivalDate: t.expectedArrivalDate,
+            dispatchedByName: t.dispatchedByName,
+            vehicleNumber: t.vehicleNumber,
+            driverName: t.driverName,
+            priority: t.priority,
             status: t.status,
           });
         }
@@ -8144,10 +8286,7 @@ function setupApiRoutes(router: express.Router) {
       });
     }
 
-    if (
-      !canUserAccessLocation(user, transfer.sourceProjectId, transfer.sourceWarehouseId) &&
-      !canUserAccessLocation(user, transfer.destinationProjectId, transfer.destinationWarehouseId)
-    ) {
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
       return res.status(403).json({
         success: false,
         message: 'Forbidden: You do not have access permission to view transfers for these locations',
@@ -8165,10 +8304,18 @@ function setupApiRoutes(router: express.Router) {
   // GET /api/stock-transfers/:id/history
   router.get('/stock-transfers/:id/history', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
     const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
     const transfer = transfers.find((t) => t.id === req.params.id || t.transferNumber === req.params.id);
 
     if (!transfer) {
       return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have access permission to view audit history for this transfer',
+      });
     }
 
     return res.status(200).json({
@@ -8181,10 +8328,18 @@ function setupApiRoutes(router: express.Router) {
   // GET /api/stock-transfers/:id/reconciliation
   router.get('/stock-transfers/:id/reconciliation', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
     const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
     const transfer = transfers.find((t) => t.id === req.params.id || t.transferNumber === req.params.id);
 
     if (!transfer) {
       return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have access permission to view reconciliation for this transfer',
+      });
     }
 
     const lines = transfer.items.map((it) => {
@@ -8200,9 +8355,12 @@ function setupApiRoutes(router: express.Router) {
 
       return {
         lineId: it.id,
+        materialId: it.materialId,
         materialCode: it.materialCode,
         materialName: it.materialName,
         unitCode: it.unitCode,
+        requestedQuantity: it.requestedQuantity,
+        approvedQuantity: it.approvedQuantity,
         dispatchedQuantity: dispatched,
         receivedGoodQuantity: good,
         damagedQuantity: damaged,
@@ -8212,6 +8370,13 @@ function setupApiRoutes(router: express.Router) {
         totalAccounted,
         isReconciled,
         variance: round2(dispatched - totalAccounted),
+        unitCostAtDispatch: it.unitCostAtDispatch || 0,
+        sourceStockLedgerEntryId: it.sourceStockLedgerEntryId,
+        destinationStockLedgerEntryId: it.destinationStockLedgerEntryId,
+        destinationStockLedgerEntryIds: it.destinationStockLedgerEntryIds || (it.destinationStockLedgerEntryId ? [it.destinationStockLedgerEntryId] : []),
+        resolutionStatus: it.resolutionStatus || 'None',
+        resolutionNotes: it.resolutionNotes,
+        discrepancyReason: it.discrepancyReason,
       };
     });
 
@@ -8223,6 +8388,7 @@ function setupApiRoutes(router: express.Router) {
         transferId: transfer.id,
         transferNumber: transfer.transferNumber,
         status: transfer.status,
+        discrepancyStatus: transfer.discrepancyStatus,
         isFullyReconciled,
         lines,
       },
@@ -8239,8 +8405,11 @@ function setupApiRoutes(router: express.Router) {
       destinationProjectId = 'PRJ-101',
       purpose,
       transferReason,
+      referenceNumber,
       priority = 'Medium',
       requestDate,
+      plannedDispatchDate,
+      expectedArrivalDate,
       items,
       remarks,
       submitImmediately,
@@ -8265,15 +8434,30 @@ function setupApiRoutes(router: express.Router) {
     if (!canUserAccessLocation(user, sourceProjectId, sourceWarehouseId)) {
       return res.status(403).json({
         success: false,
-        message: `Forbidden: You do not have authorization scope for source location '${sourceWarehouseId}'.`,
+        message: `Forbidden: You do not have authorization scope for source location '${sourceWarehouseId}' (${sourceProjectId}).`,
       });
     }
 
     if (!canUserAccessLocation(user, destinationProjectId, destinationWarehouseId)) {
       return res.status(403).json({
         success: false,
-        message: `Forbidden: You do not have authorization scope for destination location '${destinationWarehouseId}'.`,
+        message: `Forbidden: You do not have authorization scope for destination location '${destinationWarehouseId}' (${destinationProjectId}).`,
       });
+    }
+
+    // Cross-Project Check: If moving across projects, user must have access to both projects
+    const isCrossProject = sourceProjectId !== destinationProjectId;
+    if (isCrossProject) {
+      const isGlobalRole = user.roles.includes('SuperAdmin') || user.roles.includes('InventoryManager') || user.roles.includes('Auditor');
+      const hasBothProjects =
+        user.projectScopes.includes('ALL') ||
+        (user.projectScopes.includes(sourceProjectId) && user.projectScopes.includes(destinationProjectId));
+      if (!isGlobalRole && !hasBothProjects) {
+        return res.status(403).json({
+          success: false,
+          message: `Forbidden: Cross-project transfers between '${sourceProjectId}' and '${destinationProjectId}' require authorization for both projects.`,
+        });
+      }
     }
 
     if (!purpose || !String(purpose).trim()) {
@@ -8310,6 +8494,8 @@ function setupApiRoutes(router: express.Router) {
         materialCode: mat.itemCode,
         materialName: mat.name,
         unitCode: mat.baseUnitName || 'Unit',
+        sourceLocationId: `${sourceProjectId}:${sourceWarehouseId}`,
+        destinationLocationId: `${destinationProjectId}:${destinationWarehouseId}`,
         requestedQuantity: reqQty,
         approvedQuantity: reqQty,
         dispatchedQuantity: 0,
@@ -8329,11 +8515,10 @@ function setupApiRoutes(router: express.Router) {
 
     parsedItems.forEach((it) => (it.stockTransferId = transferId));
 
-    const sourceWarehouseName = sourceWarehouseId === 'WH-01' ? 'Metro Central Staging Yard' : sourceWarehouseId === 'WH-02' ? 'North Industrial Depot & Yard' : 'East Harbor Hub';
-    const destWarehouseName = destinationWarehouseId === 'WH-01' ? 'Metro Central Staging Yard' : destinationWarehouseId === 'WH-02' ? 'North Industrial Depot & Yard' : 'East Harbor Hub';
-
-    const sourceProjectName = sourceProjectId === 'PRJ-102' ? 'Harbor Commercial Docklands' : sourceProjectId === 'PRJ-103' ? 'Skyline Corporate Towers' : 'Metro Rail Line 3 Extension';
-    const destProjectName = destinationProjectId === 'PRJ-102' ? 'Harbor Commercial Docklands' : destinationProjectId === 'PRJ-103' ? 'Skyline Corporate Towers' : 'Metro Rail Line 3 Extension';
+    const sourceWarehouseName = resolveWarehouseName(sourceWarehouseId);
+    const destWarehouseName = resolveWarehouseName(destinationWarehouseId);
+    const sourceProjectName = resolveProjectName(sourceProjectId);
+    const destProjectName = resolveProjectName(destinationProjectId);
 
     const initialStatus: TransferStatus = submitImmediately ? 'Submitted' : 'Draft';
 
@@ -8345,7 +8530,7 @@ function setupApiRoutes(router: express.Router) {
         actorName: user.fullName,
         actorRole: user.roles[0] || 'Storekeeper',
         action: 'DraftCreated',
-        comments: `Stock transfer request draft created from ${sourceWarehouseName} to ${destWarehouseName}. Purpose: ${purpose}`,
+        comments: `Stock transfer request draft created from ${sourceWarehouseName} (${sourceProjectName}) to ${destWarehouseName} (${destProjectName}). Purpose: ${purpose}`,
         timestampUtc: nowUtc,
       },
     ];
@@ -8374,9 +8559,14 @@ function setupApiRoutes(router: express.Router) {
       destinationWarehouseName: destWarehouseName,
       destinationProjectId,
       destinationProjectName: destProjectName,
+      isCrossProject,
+      isCrossWarehouse: sourceWarehouseId !== destinationWarehouseId,
       requestDate: requestDate || nowUtc.split('T')[0],
+      plannedDispatchDate: plannedDispatchDate || undefined,
+      expectedArrivalDate: expectedArrivalDate || undefined,
       purpose: String(purpose).trim(),
       transferReason: transferReason ? String(transferReason).trim() : undefined,
+      referenceNumber: referenceNumber ? String(referenceNumber).trim() : undefined,
       priority: ['Low', 'Medium', 'High', 'Urgent'].includes(priority) ? priority : 'Medium',
       status: initialStatus,
       discrepancyStatus: 'None',
@@ -8426,24 +8616,105 @@ function setupApiRoutes(router: express.Router) {
       return res.status(400).json({ success: false, message: `Cannot edit transfer in status '${transfer.status}'. Only Draft or ReturnedForCorrection can be edited.` });
     }
 
-    const { purpose, transferReason, priority, items, remarks } = req.body || {};
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have authorization scope to edit this stock transfer.',
+      });
+    }
+
+    const {
+      sourceWarehouseId,
+      sourceProjectId,
+      destinationWarehouseId,
+      destinationProjectId,
+      purpose,
+      transferReason,
+      referenceNumber,
+      plannedDispatchDate,
+      expectedArrivalDate,
+      priority,
+      items,
+      remarks,
+    } = req.body || {};
     const nowUtc = new Date().toISOString();
+
+    const nextSourceWh = sourceWarehouseId || transfer.sourceWarehouseId;
+    const nextSourcePrj = sourceProjectId || transfer.sourceProjectId;
+    const nextDestWh = destinationWarehouseId || transfer.destinationWarehouseId;
+    const nextDestPrj = destinationProjectId || transfer.destinationProjectId;
+
+    if (nextSourceWh === nextDestWh && nextSourcePrj === nextDestPrj) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Location Transfer: Source and Destination stock locations cannot be identical.',
+      });
+    }
+
+    transfer.sourceWarehouseId = nextSourceWh;
+    transfer.sourceWarehouseName = resolveWarehouseName(nextSourceWh);
+    transfer.sourceProjectId = nextSourcePrj;
+    transfer.sourceProjectName = resolveProjectName(nextSourcePrj);
+    transfer.destinationWarehouseId = nextDestWh;
+    transfer.destinationWarehouseName = resolveWarehouseName(nextDestWh);
+    transfer.destinationProjectId = nextDestPrj;
+    transfer.destinationProjectName = resolveProjectName(nextDestPrj);
+    transfer.isCrossProject = nextSourcePrj !== nextDestPrj;
+    transfer.isCrossWarehouse = nextSourceWh !== nextDestWh;
 
     if (purpose) transfer.purpose = String(purpose).trim();
     if (transferReason !== undefined) transfer.transferReason = String(transferReason).trim();
+    if (referenceNumber !== undefined) transfer.referenceNumber = String(referenceNumber).trim();
+    if (plannedDispatchDate !== undefined) transfer.plannedDispatchDate = plannedDispatchDate || undefined;
+    if (expectedArrivalDate !== undefined) transfer.expectedArrivalDate = expectedArrivalDate || undefined;
     if (priority && ['Low', 'Medium', 'High', 'Urgent'].includes(priority)) transfer.priority = priority;
     if (remarks !== undefined) transfer.remarks = String(remarks).trim();
 
     if (Array.isArray(items) && items.length > 0) {
-      for (const line of items) {
+      const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+      const updatedItems: StockTransferItemRecord[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const line = items[i];
         const existing = transfer.items.find((it) => it.id === line.id || it.materialId === line.materialId);
-        if (existing) {
-          const qty = parseFloat(line.requestedQuantity);
-          if (!isNaN(qty) && qty > 0) {
-            existing.requestedQuantity = qty;
-            existing.approvedQuantity = qty;
-          }
+        const qty = parseFloat(line.requestedQuantity);
+        if (isNaN(qty) || qty <= 0) {
+          return res.status(400).json({ success: false, message: `Line #${i + 1}: Requested transfer quantity must be greater than 0.` });
         }
+        if (existing) {
+          existing.requestedQuantity = qty;
+          existing.approvedQuantity = qty;
+          existing.sourceLocationId = `${nextSourcePrj}:${nextSourceWh}`;
+          existing.destinationLocationId = `${nextDestPrj}:${nextDestWh}`;
+          updatedItems.push(existing);
+        } else if (line.materialId) {
+          const mat = materials.find((m) => m.id === line.materialId || m.itemCode === line.materialId);
+          if (!mat) {
+            return res.status(400).json({ success: false, message: `Line #${i + 1}: Material '${line.materialId}' not found.` });
+          }
+          updatedItems.push({
+            id: `STI-${Date.now().toString(36)}-${i}-${crypto.randomBytes(2).toString('hex')}`,
+            stockTransferId: transfer.id,
+            materialId: mat.id,
+            materialCode: mat.itemCode,
+            materialName: mat.name,
+            unitCode: mat.baseUnitName || 'Unit',
+            sourceLocationId: `${nextSourcePrj}:${nextSourceWh}`,
+            destinationLocationId: `${nextDestPrj}:${nextDestWh}`,
+            requestedQuantity: qty,
+            approvedQuantity: qty,
+            dispatchedQuantity: 0,
+            receivedGoodQuantity: 0,
+            damagedQuantity: 0,
+            shortQuantity: 0,
+            disputedQuantity: 0,
+            remainingInTransitQuantity: 0,
+            unitCostAtDispatch: 0,
+            totalDispatchedAmount: 0,
+          });
+        }
+      }
+      if (updatedItems.length > 0) {
+        transfer.items = updatedItems;
       }
     }
 
@@ -8476,6 +8747,10 @@ function setupApiRoutes(router: express.Router) {
     }
 
     const transfer = transfers[idx];
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have authorization scope to submit this transfer.' });
+    }
+
     if (transfer.status !== 'Draft' && transfer.status !== 'ReturnedForCorrection') {
       return res.status(400).json({ success: false, message: `Cannot submit transfer in '${transfer.status}' status.` });
     }
@@ -8516,6 +8791,13 @@ function setupApiRoutes(router: express.Router) {
 
     const transfer = transfers[idx];
 
+    if (!canUserAccessLocation(user, transfer.sourceProjectId, transfer.sourceWarehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: Approver does not have authorization scope for source location '${transfer.sourceWarehouseId}' (${transfer.sourceProjectId}).`,
+      });
+    }
+
     // Dual-control policy: Requesting creator cannot self-approve
     if (transfer.createdByUserId === user.sub && !user.roles.includes('SuperAdmin')) {
       return res.status(403).json({
@@ -8537,10 +8819,23 @@ function setupApiRoutes(router: express.Router) {
         if (item) {
           const appQty = parseFloat(line.approvedQuantity);
           if (!isNaN(appQty) && appQty >= 0) {
+            if (appQty > item.requestedQuantity) {
+              return res.status(400).json({
+                success: false,
+                message: `Approval violation: Approved quantity (${appQty}) cannot exceed requested quantity (${item.requestedQuantity}) for '${item.materialName}'.`,
+              });
+            }
             item.approvedQuantity = appQty;
           }
         }
       }
+    }
+
+    if (transfer.items.every((it) => (it.approvedQuantity || 0) <= 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Approval violation: At least one transfer line must have an approved quantity greater than 0.',
+      });
     }
 
     transfer.status = 'Approved';
@@ -8577,6 +8872,14 @@ function setupApiRoutes(router: express.Router) {
     }
 
     const transfer = transfers[idx];
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have authorization scope to reject this transfer.' });
+    }
+
+    if (['Dispatched', 'PartiallyReceived', 'Received', 'Completed', 'Cancelled'].includes(transfer.status)) {
+      return res.status(400).json({ success: false, message: `Cannot reject transfer in '${transfer.status}' status.` });
+    }
+
     const { rejectionReason, comments } = req.body || {};
     const reason = rejectionReason || comments;
 
@@ -8617,6 +8920,14 @@ function setupApiRoutes(router: express.Router) {
     }
 
     const transfer = transfers[idx];
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have authorization scope to return this transfer.' });
+    }
+
+    if (['Dispatched', 'PartiallyReceived', 'Received', 'Completed', 'Cancelled'].includes(transfer.status)) {
+      return res.status(400).json({ success: false, message: `Cannot return transfer in '${transfer.status}' status.` });
+    }
+
     const { correctionNotes, comments } = req.body || {};
     const notes = correctionNotes || comments;
 
@@ -8646,6 +8957,65 @@ function setupApiRoutes(router: express.Router) {
     return res.status(200).json({ success: true, data: transfer, message: `Stock transfer ${transfer.transferNumber} returned for correction.` });
   });
 
+  // POST /api/stock-transfers/:id/cancel (Allowed ONLY before dispatch)
+  router.post('/stock-transfers/:id/cancel', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']), (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have authorization scope to cancel this transfer.' });
+    }
+
+    if (transfer.status === 'Cancelled') {
+      return res.status(200).json({ success: true, data: transfer, message: `Stock transfer ${transfer.transferNumber} is already cancelled.` });
+    }
+
+    if (['Dispatched', 'PartiallyReceived', 'Received', 'Completed'].includes(transfer.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot cancel transfer in '${transfer.status}' status. Cancellation is prohibited once materials have been dispatched into transit.`,
+      });
+    }
+
+    const { cancellationReason, reason, comments } = req.body || {};
+    const cancelReason = cancellationReason || reason || comments || 'Cancelled prior to dispatch.';
+
+    const nowUtc = new Date().toISOString();
+    transfer.status = 'Cancelled';
+    transfer.cancellationReason = String(cancelReason).trim();
+    transfer.cancelledByUserId = user.sub;
+    transfer.cancelledByName = user.fullName;
+    transfer.cancelledAtUtc = nowUtc;
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Cancelled',
+      comments: `Stock transfer cancelled before dispatch. Reason: ${transfer.cancellationReason}`,
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(200).json({
+      success: true,
+      data: transfer,
+      message: `Stock transfer ${transfer.transferNumber} cancelled before dispatch.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
   // POST /api/stock-transfers/:id/dispatch (Post Dispatch Outbound Movement to Stock Ledger)
   router.post('/stock-transfers/:id/dispatch', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']), (req: AuthenticatedRequest, res: Response) => {
     const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
@@ -8663,6 +9033,14 @@ function setupApiRoutes(router: express.Router) {
 
     const transfer = transfers[idx];
 
+    if (!canUserAccessLocation(user, transfer.sourceProjectId, transfer.sourceWarehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: You do not have authorization scope to dispatch stock from source location '${transfer.sourceWarehouseId}' (${transfer.sourceProjectId}).`,
+      });
+    }
+
+    // Idempotent retry protection
     if (transfer.status === 'Dispatched') {
       return res.status(200).json({ success: true, data: transfer, message: `Transfer ${transfer.transferNumber} is already dispatched.` });
     }
@@ -8671,14 +9049,14 @@ function setupApiRoutes(router: express.Router) {
       return res.status(400).json({ success: false, message: `Cannot dispatch transfer in status '${transfer.status}'. Only 'Approved' transfers can be dispatched.` });
     }
 
-    const { items, dispatchDate, expectedArrivalDate, remarks } = req.body || {};
+    const { items, dispatchDate, expectedArrivalDate, vehicleNumber, driverName, dispatchReference, remarks } = req.body || {};
 
     if (Array.isArray(items) && items.length > 0) {
       for (const line of items) {
         const item = transfer.items.find((it) => it.id === line.id || it.materialId === line.materialId);
         if (item) {
           const dQty = parseFloat(line.dispatchedQuantity);
-          if (!isNaN(dQty) && dQty > 0) {
+          if (!isNaN(dQty) && dQty >= 0) {
             if (dQty > item.approvedQuantity) {
               return res.status(400).json({
                 success: false,
@@ -8698,6 +9076,13 @@ function setupApiRoutes(router: express.Router) {
       });
     }
 
+    if (transfer.items.every((it) => (it.dispatchedQuantity || 0) <= 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dispatch violation: Total dispatched quantity across transfer lines must be greater than 0.',
+      });
+    }
+
     try {
       postStockTransferDispatchToLedger(transfer, user, nowUtc, stockLedger, inventoryBalances, materials);
     } catch (err: any) {
@@ -8705,8 +9090,12 @@ function setupApiRoutes(router: express.Router) {
     }
 
     transfer.status = 'Dispatched';
+    transfer.postingJournalStatus = 'Dispatched';
     transfer.actualDispatchDate = dispatchDate || nowUtc.split('T')[0];
     if (expectedArrivalDate) transfer.expectedArrivalDate = expectedArrivalDate;
+    if (vehicleNumber) transfer.vehicleNumber = String(vehicleNumber).trim();
+    if (driverName) transfer.driverName = String(driverName).trim();
+    if (dispatchReference) transfer.dispatchReference = String(dispatchReference).trim();
     if (remarks) transfer.remarks = String(remarks).trim();
 
     transfer.dispatchedByUserId = user.sub;
@@ -8756,31 +9145,62 @@ function setupApiRoutes(router: express.Router) {
 
     const transfer = transfers[idx];
 
-    if (transfer.status === 'Completed') {
-      return res.status(200).json({ success: true, data: transfer, message: `Transfer ${transfer.transferNumber} is already completed.` });
+    if (!canUserAccessLocation(user, transfer.destinationProjectId, transfer.destinationWarehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: You do not have authorization scope to receive stock at destination location '${transfer.destinationWarehouseId}' (${transfer.destinationProjectId}).`,
+      });
+    }
+
+    // Idempotent retry protection when already fully received or completed
+    if (transfer.status === 'Completed' || transfer.status === 'Received') {
+      return res.status(200).json({ success: true, data: transfer, message: `Transfer ${transfer.transferNumber} is already received.` });
     }
 
     if (transfer.status !== 'Dispatched' && transfer.status !== 'PartiallyReceived') {
       return res.status(400).json({ success: false, message: `Cannot receive transfer in status '${transfer.status}'. Only 'Dispatched' or 'PartiallyReceived' transfers can be received.` });
     }
 
-    const { items, actualReceiptDate, remarks } = req.body || {};
+    const { items, actualReceiptDate, remarks, isIncremental } = req.body || {};
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Receipt verification must include at least one item line.' });
     }
 
     let hasDiscrepancy = false;
+    const lineDeltas: Record<string, { deltaGood: number; deltaAccounted: number }> = {};
 
     for (const line of items) {
       const item = transfer.items.find((it) => it.id === line.id || it.materialId === line.materialId);
       if (item) {
-        const good = Math.max(0, parseFloat(line.receivedGoodQuantity ?? item.receivedGoodQuantity) || 0);
-        const damaged = Math.max(0, parseFloat(line.damagedQuantity ?? item.damagedQuantity) || 0);
-        const short = Math.max(0, parseFloat(line.shortQuantity ?? item.shortQuantity) || 0);
-        const disputed = Math.max(0, parseFloat(line.disputedQuantity ?? item.disputedQuantity) || 0);
+        const prevGood = item.receivedGoodQuantity || 0;
+        const prevDamaged = item.damagedQuantity || 0;
+        const prevShort = item.shortQuantity || 0;
+        const prevDisputed = item.disputedQuantity || 0;
+        const prevAccounted = round2(prevGood + prevDamaged + prevShort + prevDisputed);
 
-        const totalQty = round2(good + damaged + short + disputed);
+        const inGood = Math.max(0, parseFloat(line.receivedGoodQuantity ?? 0) || 0);
+        const inDamaged = Math.max(0, parseFloat(line.damagedQuantity ?? 0) || 0);
+        const inShort = Math.max(0, parseFloat(line.shortQuantity ?? 0) || 0);
+        const inDisputed = Math.max(0, parseFloat(line.disputedQuantity ?? 0) || 0);
+        const inTotal = round2(inGood + inDamaged + inShort + inDisputed);
+
+        // Determine whether incoming payload is incremental (addition to previous partial receipt) or cumulative
+        const treatAsIncremental =
+          isIncremental === true ||
+          line.isIncremental === true ||
+          (transfer.status === 'PartiallyReceived' &&
+            prevAccounted > 0 &&
+            line.isCumulative !== true &&
+            inTotal > 0 &&
+            round2(prevAccounted + inTotal) <= item.dispatchedQuantity);
+
+        const nextGood = treatAsIncremental ? round2(prevGood + inGood) : inGood;
+        const nextDamaged = treatAsIncremental ? round2(prevDamaged + inDamaged) : inDamaged;
+        const nextShort = treatAsIncremental ? round2(prevShort + inShort) : inShort;
+        const nextDisputed = treatAsIncremental ? round2(prevDisputed + inDisputed) : inDisputed;
+
+        const totalQty = round2(nextGood + nextDamaged + nextShort + nextDisputed);
 
         if (totalQty > item.dispatchedQuantity) {
           return res.status(400).json({
@@ -8789,30 +9209,61 @@ function setupApiRoutes(router: express.Router) {
           });
         }
 
-        item.receivedGoodQuantity = good;
-        item.damagedQuantity = damaged;
-        item.shortQuantity = short;
-        item.disputedQuantity = disputed;
+        if (nextGood < prevGood || totalQty < prevAccounted) {
+          return res.status(400).json({
+            success: false,
+            message: `Receipt Violation: Cumulative received quantity (${totalQty}) cannot be less than previously recorded quantity (${prevAccounted}) for '${item.materialName}'.`,
+          });
+        }
+
+        lineDeltas[item.id] = {
+          deltaGood: round2(nextGood - prevGood),
+          deltaAccounted: round2(totalQty - prevAccounted),
+        };
+
+        item.receivedGoodQuantity = nextGood;
+        item.damagedQuantity = nextDamaged;
+        item.shortQuantity = nextShort;
+        item.disputedQuantity = nextDisputed;
 
         if (line.discrepancyReason) item.discrepancyReason = String(line.discrepancyReason).trim();
         if (line.inspectionNotes) item.inspectionNotes = String(line.inspectionNotes).trim();
+        if (Array.isArray(line.evidenceReferences)) item.evidenceReferences = line.evidenceReferences;
 
-        if (damaged > 0 || short > 0 || disputed > 0) {
+        if (nextDamaged > 0 || nextShort > 0 || nextDisputed > 0) {
           hasDiscrepancy = true;
-          item.resolutionStatus = item.resolutionStatus || 'Pending';
+          item.resolutionStatus = item.resolutionStatus && item.resolutionStatus !== 'None' ? item.resolutionStatus : 'Pending';
         }
       }
     }
 
-    postStockTransferReceiptToLedger(transfer, user, nowUtc, stockLedger, inventoryBalances, materials);
+    // Also check if any existing line on the transfer has unresolved discrepancies
+    for (const it of transfer.items) {
+      if ((it.damagedQuantity || 0) > 0 || (it.shortQuantity || 0) > 0 || (it.disputedQuantity || 0) > 0) {
+        hasDiscrepancy = true;
+        if (!it.resolutionStatus || it.resolutionStatus === 'None') {
+          it.resolutionStatus = 'Pending';
+        }
+      }
+    }
+
+    postStockTransferReceiptToLedger(transfer, user, nowUtc, stockLedger, inventoryBalances, materials, lineDeltas);
 
     const totalDispatched = round2(transfer.items.reduce((sum, it) => sum + it.dispatchedQuantity, 0));
     const totalGood = round2(transfer.items.reduce((sum, it) => sum + it.receivedGoodQuantity, 0));
-    const totalAccounted = round2(transfer.items.reduce((sum, it) => sum + (it.receivedGoodQuantity + it.damagedQuantity + it.shortQuantity + it.disputedQuantity), 0));
+    const totalAccounted = round2(
+      transfer.items.reduce(
+        (sum, it) => sum + (it.receivedGoodQuantity + it.damagedQuantity + it.shortQuantity + it.disputedQuantity),
+        0
+      )
+    );
 
     let nextStatus: TransferStatus = 'Completed';
     if (totalAccounted < totalDispatched) {
       nextStatus = 'PartiallyReceived';
+      if (hasDiscrepancy) {
+        transfer.discrepancyStatus = 'PendingReview';
+      }
     } else if (hasDiscrepancy) {
       nextStatus = 'Received';
       transfer.discrepancyStatus = 'PendingReview';
@@ -8822,6 +9273,7 @@ function setupApiRoutes(router: express.Router) {
     }
 
     transfer.status = nextStatus;
+    transfer.postingJournalStatus = nextStatus === 'Completed' ? 'Completed' : 'Dispatched';
     transfer.actualReceiptDate = actualReceiptDate || nowUtc.split('T')[0];
     if (remarks) transfer.remarks = String(remarks).trim();
 
@@ -8842,7 +9294,7 @@ function setupApiRoutes(router: express.Router) {
       actorName: user.fullName,
       actorRole: user.roles[0] || 'Storekeeper',
       action: 'Received',
-      comments: `Transfer received at destination. Accepted Good: ${totalGood}, Damaged: ${transfer.items.reduce((sum, it) => sum + it.damagedQuantity, 0)}, Short: ${transfer.items.reduce((sum, it) => sum + it.shortQuantity, 0)}.`,
+      comments: `Transfer received at destination (${nextStatus}). Cumulative Accepted Good: ${totalGood}, Damaged: ${transfer.items.reduce((sum, it) => sum + it.damagedQuantity, 0)}, Short: ${transfer.items.reduce((sum, it) => sum + it.shortQuantity, 0)}, Disputed: ${transfer.items.reduce((sum, it) => sum + it.disputedQuantity, 0)}.`,
       timestampUtc: nowUtc,
     });
 
@@ -8861,6 +9313,62 @@ function setupApiRoutes(router: express.Router) {
     });
   });
 
+  // POST /api/stock-transfers/:id/inspect (Record QA Inspection Notes & Evidence on Received Transfer)
+  router.post('/stock-transfers/:id/inspect', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const user = req.user!;
+    const idx = transfers.findIndex((t) => t.id === req.params.id || t.transferNumber === req.params.id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: `Stock transfer '${req.params.id}' was not found` });
+    }
+
+    const transfer = transfers[idx];
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have authorization scope to inspect this transfer.' });
+    }
+
+    const { items, inspectionNotes, comments } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    if (Array.isArray(items)) {
+      for (const line of items) {
+        const item = transfer.items.find((it) => it.id === line.id || it.materialId === line.materialId);
+        if (item) {
+          if (line.inspectionNotes !== undefined) item.inspectionNotes = String(line.inspectionNotes).trim();
+          if (line.discrepancyReason !== undefined) item.discrepancyReason = String(line.discrepancyReason).trim();
+          if (Array.isArray(line.evidenceReferences)) item.evidenceReferences = line.evidenceReferences;
+        }
+      }
+    }
+
+    transfer.inspectedByUserId = user.sub;
+    transfer.inspectedByName = user.fullName;
+    transfer.inspectedAtUtc = nowUtc;
+
+    transfer.auditTrail.push({
+      id: `STA-${crypto.randomBytes(4).toString('hex')}`,
+      stockTransferId: transfer.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Inspected',
+      comments: inspectionNotes || comments || 'Transfer destination inspection recorded.',
+      timestampUtc: nowUtc,
+    });
+
+    transfer.updatedAtUtc = nowUtc;
+    transfers[idx] = transfer;
+    writeJsonAtomic(stockTransfersFile, transfers);
+
+    return res.status(200).json({
+      success: true,
+      data: transfer,
+      message: `Inspection recorded for stock transfer ${transfer.transferNumber}.`,
+      timestampUtc: nowUtc,
+    });
+  });
+
   // POST /api/stock-transfers/:id/complete
   router.post('/stock-transfers/:id/complete', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
     const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
@@ -8872,11 +9380,45 @@ function setupApiRoutes(router: express.Router) {
     }
 
     const transfer = transfers[idx];
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have authorization scope to complete this transfer.' });
+    }
+
+    if (transfer.status === 'Completed') {
+      return res.status(200).json({ success: true, data: transfer, message: `Stock transfer ${transfer.transferNumber} is already completed.` });
+    }
+
+    if (!['Received', 'PartiallyReceived'].includes(transfer.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot complete transfer in '${transfer.status}' status. Transfer must be received first.`,
+      });
+    }
+
+    const hasRemainingInTransit = transfer.items.some((it) => (it.remainingInTransitQuantity || 0) > 0);
+    if (hasRemainingInTransit) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot complete transfer while quantities remain in transit. All dispatched quantities must be accounted for.',
+      });
+    }
+
+    const hasUnresolvedDiscrepancy = transfer.items.some((it) => it.resolutionStatus === 'Pending');
+    if (hasUnresolvedDiscrepancy) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot complete transfer while line item discrepancies are still Pending resolution.',
+      });
+    }
+
     const { comments } = req.body || {};
     const nowUtc = new Date().toISOString();
 
     transfer.status = 'Completed';
-    transfer.discrepancyStatus = 'Resolved';
+    transfer.postingJournalStatus = 'Completed';
+    if (transfer.discrepancyStatus === 'PendingReview') {
+      transfer.discrepancyStatus = 'Resolved';
+    }
     transfer.completedByUserId = user.sub;
     transfer.completedByName = user.fullName;
     transfer.completedAtUtc = nowUtc;
@@ -8910,24 +9452,39 @@ function setupApiRoutes(router: express.Router) {
     }
 
     const transfer = transfers[idx];
+    if (!canUserAccessEitherTransferLocation(user, transfer)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have authorization scope to resolve discrepancies for this transfer.',
+      });
+    }
+
     const item = transfer.items.find((it) => it.id === req.params.lineId || it.materialId === req.params.lineId);
 
     if (!item) {
       return res.status(404).json({ success: false, message: `Transfer line item '${req.params.lineId}' was not found` });
     }
 
-    const { resolutionNotes, comments, action } = req.body || {};
+    const { resolutionNotes, comments, action, resolutionAction } = req.body || {};
     const notes = resolutionNotes || comments || action || 'Discrepancy reviewed and reconciled.';
+    const resolvedAction = resolutionAction || action || 'WriteOffApproved';
 
     const nowUtc = new Date().toISOString();
     item.resolutionStatus = 'Resolved';
+    item.resolutionAction = resolvedAction;
     item.resolutionNotes = String(notes).trim();
+    item.resolvedByUserId = user.sub;
+    item.resolvedByName = user.fullName;
+    item.resolvedAtUtc = nowUtc;
 
     const allLinesResolved = transfer.items.every((it) => !it.resolutionStatus || it.resolutionStatus === 'Resolved' || it.resolutionStatus === 'None');
+    const noRemainingTransit = transfer.items.every((it) => (it.remainingInTransitQuantity || 0) === 0);
+
     if (allLinesResolved) {
       transfer.discrepancyStatus = 'Resolved';
-      if (transfer.status === 'Received') {
+      if (transfer.status === 'Received' && noRemainingTransit) {
         transfer.status = 'Completed';
+        transfer.postingJournalStatus = 'Completed';
         transfer.completedByUserId = user.sub;
         transfer.completedByName = user.fullName;
         transfer.completedAtUtc = nowUtc;
@@ -8941,7 +9498,7 @@ function setupApiRoutes(router: express.Router) {
       actorName: user.fullName,
       actorRole: user.roles[0] || 'InventoryManager',
       action: 'DiscrepancyResolved',
-      comments: `Discrepancy resolved for '${item.materialName}'. Action/Notes: ${notes}`,
+      comments: `Discrepancy resolved for '${item.materialName}' (${resolvedAction}). Notes: ${notes}`,
       timestampUtc: nowUtc,
     });
 
@@ -9061,6 +9618,2498 @@ function setupApiRoutes(router: express.Router) {
       success: false,
       message: 'Method Not Allowed (Policy Violation): Direct deletion of posted inventory transactions or balances is strictly prohibited. The stock ledger is immutable.',
       timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // ========================================================================
+  // PROMPT 12: NOTIFICATIONS, MANAGEMENT DASHBOARD, REPORTS & CSV EXPORT
+  // ========================================================================
+
+  const notificationsFile = path.join(DATA_DIR, 'notifications.json');
+
+  type NotificationSeverity = 'Info' | 'Success' | 'Warning' | 'Critical';
+  type NotificationCategory =
+    | 'Requisition'
+    | 'PurchaseOrder'
+    | 'GRN'
+    | 'MaterialIssue'
+    | 'MaterialReturn'
+    | 'StockTransfer'
+    | 'LowStock'
+    | 'Reconciliation';
+
+  interface NotificationRecord {
+    id: string;
+    eventKey: string;
+    category: NotificationCategory;
+    eventType: string;
+    severity: NotificationSeverity;
+    title: string;
+    message: string;
+    sourceDocumentType: string;
+    sourceDocumentId: string;
+    sourceDocumentNumber: string;
+    targetRoute: string;
+    projectId?: string;
+    projectName?: string;
+    warehouseId?: string;
+    warehouseName?: string;
+    secondaryProjectId?: string;
+    secondaryWarehouseId?: string;
+    recipientUserIds: string[];
+    recipientRoles: string[];
+    readByUserIds: string[];
+    readTimestampsByUser: Record<string, string>;
+    createdAtUtc: string;
+  }
+
+  function hasGlobalScopeRole(user: JwtPayload): boolean {
+    if (!user) return false;
+    const dbUser = enterpriseUsers.find((u) => u.id === user.sub);
+    const roles = (dbUser ? dbUser.roles : user.roles) || [];
+    return (
+      roles.includes('SuperAdmin') ||
+      roles.includes('InventoryManager') ||
+      roles.includes('AccountsOfficer')
+    );
+  }
+
+  function getUserEffectiveRoles(user: JwtPayload): string[] {
+    if (!user) return [];
+    const dbUser = enterpriseUsers.find((u) => u.id === user.sub);
+    return (dbUser ? dbUser.roles : user.roles) || [];
+  }
+
+  function validateExplicitScopeFilters(
+    user: JwtPayload,
+    projectId?: string,
+    warehouseId?: string
+  ): { valid: boolean; message?: string } {
+    if (!user) {
+      return { valid: false, message: 'Unauthorized' };
+    }
+    if (hasGlobalScopeRole(user)) {
+      return { valid: true };
+    }
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      if (!canUserAccessProject(user, projectId)) {
+        return {
+          valid: false,
+          message: `Forbidden: You do not have authorization to access project scope '${projectId}'.`,
+        };
+      }
+    }
+    if (warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL') {
+      if (!canUserAccessWarehouse(user, warehouseId)) {
+        return {
+          valid: false,
+          message: `Forbidden: You do not have authorization to access warehouse scope '${warehouseId}'.`,
+        };
+      }
+    }
+    return { valid: true };
+  }
+
+  function canUserReadStrictScope(
+    user: JwtPayload,
+    projectId?: string,
+    warehouseId?: string
+  ): boolean {
+    if (!user) return false;
+    if (hasGlobalScopeRole(user)) return true;
+    const okProject = !projectId || canUserAccessProject(user, projectId);
+    const okWarehouse = !warehouseId || canUserAccessWarehouse(user, warehouseId);
+    return okProject && okWarehouse;
+  }
+
+  function parseDateFilterBounds(
+    fromDateRaw?: unknown,
+    toDateRaw?: unknown
+  ): { valid: boolean; fromDate?: string; toDate?: string; message?: string } {
+    const fromDate =
+      typeof fromDateRaw === 'string' && fromDateRaw.trim() ? fromDateRaw.trim().slice(0, 10) : undefined;
+    const toDate =
+      typeof toDateRaw === 'string' && toDateRaw.trim() ? toDateRaw.trim().slice(0, 10) : undefined;
+
+    if (fromDate && isNaN(Date.parse(fromDate))) {
+      return { valid: false, message: `Invalid fromDate parameter '${fromDateRaw}'. Expected YYYY-MM-DD.` };
+    }
+    if (toDate && isNaN(Date.parse(toDate))) {
+      return { valid: false, message: `Invalid toDate parameter '${toDateRaw}'. Expected YYYY-MM-DD.` };
+    }
+    if (fromDate && toDate && fromDate > toDate) {
+      return {
+        valid: false,
+        message: `Invalid date range: fromDate (${fromDate}) cannot be after toDate (${toDate}).`,
+      };
+    }
+    return { valid: true, fromDate, toDate };
+  }
+
+  function isDateWithinBounds(
+    dateOrTimestamp: string | undefined,
+    fromDate?: string,
+    toDate?: string
+  ): boolean {
+    if (!fromDate && !toDate) return true;
+    if (!dateOrTimestamp) return false;
+    const datePart = dateOrTimestamp.slice(0, 10);
+    if (fromDate && datePart < fromDate) return false;
+    if (toDate && datePart > toDate) return false;
+    return true;
+  }
+
+  function syncAndGetNotifications(): NotificationRecord[] {
+    const existing = readJsonSafe<NotificationRecord[]>(notificationsFile, []);
+    const byEventKey = new Map<string, NotificationRecord>();
+    for (const n of existing) {
+      if (n && n.eventKey) {
+        byEventKey.set(n.eventKey, n);
+      }
+    }
+
+    let mutated = false;
+
+    function upsertNotification(candidate: Omit<NotificationRecord, 'id' | 'readByUserIds' | 'readTimestampsByUser'>) {
+      const found = byEventKey.get(candidate.eventKey);
+      if (found) {
+        return found;
+      }
+      const created: NotificationRecord = {
+        ...candidate,
+        id: `NTF-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`,
+        readByUserIds: [],
+        readTimestampsByUser: {},
+      };
+      existing.unshift(created);
+      byEventKey.set(created.eventKey, created);
+      mutated = true;
+      return created;
+    }
+
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+    const balances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+    const receiptLedger = readJsonSafe<ReceiptLedgerRecord[]>(receiptLedgerFile, []);
+    const nowUtc = new Date().toISOString();
+    const todayStr = nowUtc.slice(0, 10);
+
+    // 1. Requisition Events
+    for (const r of requisitions) {
+      if (r.status === 'Submitted') {
+        upsertNotification({
+          eventKey: `REQ_SUBMITTED_${r.id}`,
+          category: 'Requisition',
+          eventType: 'RequisitionSubmitted',
+          severity: r.priority === 'Urgent' || r.priority === 'High' ? 'Warning' : 'Info',
+          title: `Requisition ${r.requisitionNumber} Pending Approval`,
+          message: `${r.requesterName} submitted requisition ${r.requisitionNumber} (${r.priority} priority) for ${r.projectName}.`,
+          sourceDocumentType: 'MaterialRequisition',
+          sourceDocumentId: r.id,
+          sourceDocumentNumber: r.requisitionNumber,
+          targetRoute: `/requisitions/${r.id}`,
+          projectId: r.projectId,
+          projectName: r.projectName,
+          recipientUserIds: [r.requesterUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager'],
+          createdAtUtc: r.updatedAtUtc || r.createdAtUtc || nowUtc,
+        });
+      } else if (r.status === 'Approved') {
+        upsertNotification({
+          eventKey: `REQ_APPROVED_${r.id}`,
+          category: 'Requisition',
+          eventType: 'RequisitionApproved',
+          severity: 'Success',
+          title: `Requisition ${r.requisitionNumber} Approved`,
+          message: `Requisition ${r.requisitionNumber} for ${r.projectName} was approved by ${r.approvedByName || 'Management'} and is ready for fulfillment.`,
+          sourceDocumentType: 'MaterialRequisition',
+          sourceDocumentId: r.id,
+          sourceDocumentNumber: r.requisitionNumber,
+          targetRoute: `/requisitions/${r.id}`,
+          projectId: r.projectId,
+          projectName: r.projectName,
+          recipientUserIds: [r.requesterUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper', 'ProcurementOfficer'],
+          createdAtUtc: r.approvedAtUtc || r.updatedAtUtc || r.createdAtUtc || nowUtc,
+        });
+      } else if (r.status === 'Rejected') {
+        upsertNotification({
+          eventKey: `REQ_REJECTED_${r.id}`,
+          category: 'Requisition',
+          eventType: 'RequisitionRejected',
+          severity: 'Critical',
+          title: `Requisition ${r.requisitionNumber} Rejected`,
+          message: `Requisition ${r.requisitionNumber} for ${r.projectName} was rejected. Reason: ${r.rejectionReason || 'See document history'}.`,
+          sourceDocumentType: 'MaterialRequisition',
+          sourceDocumentId: r.id,
+          sourceDocumentNumber: r.requisitionNumber,
+          targetRoute: `/requisitions/${r.id}`,
+          projectId: r.projectId,
+          projectName: r.projectName,
+          recipientUserIds: [r.requesterUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager'],
+          createdAtUtc: r.updatedAtUtc || r.createdAtUtc || nowUtc,
+        });
+      } else if (r.status === 'ReturnedForCorrection') {
+        upsertNotification({
+          eventKey: `REQ_RETURNED_${r.id}`,
+          category: 'Requisition',
+          eventType: 'RequisitionReturned',
+          severity: 'Warning',
+          title: `Requisition ${r.requisitionNumber} Returned for Correction`,
+          message: `Requisition ${r.requisitionNumber} requires revision: ${r.correctionNotes || 'Review comments on document'}.`,
+          sourceDocumentType: 'MaterialRequisition',
+          sourceDocumentId: r.id,
+          sourceDocumentNumber: r.requisitionNumber,
+          targetRoute: `/requisitions/${r.id}`,
+          projectId: r.projectId,
+          projectName: r.projectName,
+          recipientUserIds: [r.requesterUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager'],
+          createdAtUtc: r.updatedAtUtc || r.createdAtUtc || nowUtc,
+        });
+      }
+    }
+
+    // 2. GRN Events & Discrepancies
+    for (const g of grns) {
+      if (g.status === 'SubmittedForInspection') {
+        upsertNotification({
+          eventKey: `GRN_SUBMITTED_${g.id}`,
+          category: 'GRN',
+          eventType: 'GrnSubmitted',
+          severity: 'Info',
+          title: `GRN ${g.grnNumber} Awaiting QA Inspection`,
+          message: `Goods receipt ${g.grnNumber} from ${g.supplierName} at ${g.warehouseName} is awaiting quality inspection.`,
+          sourceDocumentType: 'GoodsReceivedNote',
+          sourceDocumentId: g.id,
+          sourceDocumentNumber: g.grnNumber,
+          targetRoute: `/grns/${g.id}`,
+          projectId: g.projectId,
+          projectName: g.projectName,
+          warehouseId: g.warehouseId,
+          warehouseName: g.warehouseName,
+          recipientUserIds: [g.receivedByUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper', 'ProcurementOfficer'],
+          createdAtUtc: g.updatedAtUtc || g.createdAtUtc || nowUtc,
+        });
+      } else if (g.status === 'Inspected') {
+        upsertNotification({
+          eventKey: `GRN_INSPECTED_${g.id}`,
+          category: 'GRN',
+          eventType: 'GrnInspected',
+          severity: 'Info',
+          title: `GRN ${g.grnNumber} Inspected — Pending Approval`,
+          message: `QA inspection completed on ${g.grnNumber} (Accepted: ${g.totalAcceptedQuantity}). Awaiting supervisory approval.`,
+          sourceDocumentType: 'GoodsReceivedNote',
+          sourceDocumentId: g.id,
+          sourceDocumentNumber: g.grnNumber,
+          targetRoute: `/grns/${g.id}`,
+          projectId: g.projectId,
+          projectName: g.projectName,
+          warehouseId: g.warehouseId,
+          warehouseName: g.warehouseName,
+          recipientUserIds: [g.receivedByUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager'],
+          createdAtUtc: g.inspectedAtUtc || g.updatedAtUtc || nowUtc,
+        });
+      } else if (g.status === 'Approved') {
+        upsertNotification({
+          eventKey: `GRN_APPROVED_${g.id}`,
+          category: 'GRN',
+          eventType: 'GrnApproved',
+          severity: 'Success',
+          title: `GRN ${g.grnNumber} Approved for Stock Posting`,
+          message: `GRN ${g.grnNumber} at ${g.warehouseName} has been approved and is ready to post into inventory.`,
+          sourceDocumentType: 'GoodsReceivedNote',
+          sourceDocumentId: g.id,
+          sourceDocumentNumber: g.grnNumber,
+          targetRoute: `/grns/${g.id}`,
+          projectId: g.projectId,
+          projectName: g.projectName,
+          warehouseId: g.warehouseId,
+          warehouseName: g.warehouseName,
+          recipientUserIds: [g.receivedByUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper'],
+          createdAtUtc: g.approvedAtUtc || g.updatedAtUtc || nowUtc,
+        });
+      } else if (g.status === 'Posted') {
+        upsertNotification({
+          eventKey: `GRN_POSTED_${g.id}`,
+          category: 'GRN',
+          eventType: 'GrnPosted',
+          severity: 'Success',
+          title: `GRN ${g.grnNumber} Posted to Stock Ledger`,
+          message: `GRN ${g.grnNumber} (${g.supplierName}) posted ${g.totalAcceptedQuantity} accepted units worth $${g.totalAcceptedValue.toLocaleString()} to ${g.warehouseName}.`,
+          sourceDocumentType: 'GoodsReceivedNote',
+          sourceDocumentId: g.id,
+          sourceDocumentNumber: g.grnNumber,
+          targetRoute: `/grns/${g.id}`,
+          projectId: g.projectId,
+          projectName: g.projectName,
+          warehouseId: g.warehouseId,
+          warehouseName: g.warehouseName,
+          recipientUserIds: [g.receivedByUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper', 'AccountsOfficer'],
+          createdAtUtc: g.postedAtUtc || g.updatedAtUtc || nowUtc,
+        });
+      }
+
+      const hasGrnDiscrepancy =
+        (g.totalRejectedQuantity || 0) > 0 ||
+        (g.totalDamagedQuantity || 0) > 0 ||
+        (g.totalShortQuantity || 0) > 0 ||
+        Boolean(g.inspectionChecklist?.discrepancyIdentified);
+
+      if (hasGrnDiscrepancy) {
+        upsertNotification({
+          eventKey: `GRN_DISCREPANCY_${g.id}`,
+          category: 'GRN',
+          eventType: 'GrnDiscrepancyFlagged',
+          severity: 'Warning',
+          title: `Delivery Discrepancy on ${g.grnNumber}`,
+          message: `GRN ${g.grnNumber} (${g.supplierName}) flagged with Rejected: ${g.totalRejectedQuantity || 0}, Damaged: ${g.totalDamagedQuantity || 0}, Short: ${g.totalShortQuantity || 0}.`,
+          sourceDocumentType: 'GoodsReceivedNote',
+          sourceDocumentId: g.id,
+          sourceDocumentNumber: g.grnNumber,
+          targetRoute: `/grns/${g.id}`,
+          projectId: g.projectId,
+          projectName: g.projectName,
+          warehouseId: g.warehouseId,
+          warehouseName: g.warehouseName,
+          recipientUserIds: [g.receivedByUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager', 'ProcurementOfficer', 'Storekeeper'],
+          createdAtUtc: g.inspectedAtUtc || g.updatedAtUtc || g.createdAtUtc || nowUtc,
+        });
+      }
+    }
+
+    // 3. Material Issue Events
+    for (const iss of issues) {
+      const issCreatorId = iss.createdByUserId;
+      const totalIssuedQuantity = round2(
+        (iss.items || []).reduce((s, it) => s + (it.actualIssuedQuantity ?? it.quantityToIssue ?? 0), 0)
+      );
+      const totalIssueValue = round2(
+        (iss.items || []).reduce(
+          (s, it) =>
+            s +
+            (it.totalIssuedAmount ??
+              round2((it.actualIssuedQuantity ?? it.quantityToIssue ?? 0) * (it.unitCost || 0))),
+          0
+        )
+      );
+
+      if (iss.status === 'Submitted') {
+        upsertNotification({
+          eventKey: `ISS_SUBMITTED_${iss.id}`,
+          category: 'MaterialIssue',
+          eventType: 'MaterialIssueSubmitted',
+          severity: 'Info',
+          title: `Material Issue ${iss.issueNumber} Pending Approval`,
+          message: `Material issue ${iss.issueNumber} against ${iss.requisitionNumber} at ${iss.warehouseName} is awaiting approval.`,
+          sourceDocumentType: 'MaterialIssue',
+          sourceDocumentId: iss.id,
+          sourceDocumentNumber: iss.issueNumber,
+          targetRoute: `/material-issues/${iss.id}`,
+          projectId: iss.projectId,
+          projectName: iss.projectName,
+          warehouseId: iss.warehouseId,
+          warehouseName: iss.warehouseName,
+          recipientUserIds: [issCreatorId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager'],
+          createdAtUtc: iss.updatedAtUtc || iss.createdAtUtc || nowUtc,
+        });
+      } else if (iss.status === 'Approved') {
+        upsertNotification({
+          eventKey: `ISS_APPROVED_${iss.id}`,
+          category: 'MaterialIssue',
+          eventType: 'MaterialIssueApproved',
+          severity: 'Success',
+          title: `Material Issue ${iss.issueNumber} Approved`,
+          message: `Material issue ${iss.issueNumber} for ${iss.projectName} was approved by ${iss.approvedByName || 'Approver'} and is ready for stock posting.`,
+          sourceDocumentType: 'MaterialIssue',
+          sourceDocumentId: iss.id,
+          sourceDocumentNumber: iss.issueNumber,
+          targetRoute: `/material-issues/${iss.id}`,
+          projectId: iss.projectId,
+          projectName: iss.projectName,
+          warehouseId: iss.warehouseId,
+          warehouseName: iss.warehouseName,
+          recipientUserIds: [issCreatorId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager'],
+          createdAtUtc: iss.approvedAtUtc || iss.updatedAtUtc || nowUtc,
+        });
+      } else if (iss.status === 'Rejected') {
+        upsertNotification({
+          eventKey: `ISS_REJECTED_${iss.id}`,
+          category: 'MaterialIssue',
+          eventType: 'MaterialIssueRejected',
+          severity: 'Critical',
+          title: `Material Issue ${iss.issueNumber} Rejected`,
+          message: `Material issue ${iss.issueNumber} was rejected. Reason: ${iss.rejectionReason || 'See audit trail'}.`,
+          sourceDocumentType: 'MaterialIssue',
+          sourceDocumentId: iss.id,
+          sourceDocumentNumber: iss.issueNumber,
+          targetRoute: `/material-issues/${iss.id}`,
+          projectId: iss.projectId,
+          projectName: iss.projectName,
+          warehouseId: iss.warehouseId,
+          warehouseName: iss.warehouseName,
+          recipientUserIds: [issCreatorId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager'],
+          createdAtUtc: iss.updatedAtUtc || nowUtc,
+        });
+      } else if (iss.status === 'Posted') {
+        upsertNotification({
+          eventKey: `ISS_POSTED_${iss.id}`,
+          category: 'MaterialIssue',
+          eventType: 'MaterialIssuePosted',
+          severity: 'Success',
+          title: `Material Issue ${iss.issueNumber} Posted to Site`,
+          message: `Material issue ${iss.issueNumber} (${totalIssuedQuantity} units, $${totalIssueValue.toLocaleString()}) was posted from ${iss.warehouseName} to ${iss.projectName}.`,
+          sourceDocumentType: 'MaterialIssue',
+          sourceDocumentId: iss.id,
+          sourceDocumentNumber: iss.issueNumber,
+          targetRoute: `/material-issues/${iss.id}`,
+          projectId: iss.projectId,
+          projectName: iss.projectName,
+          warehouseId: iss.warehouseId,
+          warehouseName: iss.warehouseName,
+          recipientUserIds: [issCreatorId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer'],
+          createdAtUtc: iss.postedAtUtc || iss.updatedAtUtc || nowUtc,
+        });
+      }
+    }
+
+    // 4. Material Return Events
+    for (const ret of returns) {
+      if (['Submitted', 'Inspected', 'Approved', 'Posted'].includes(ret.status)) {
+        const totalReusableQty = round2(
+          (ret.items || []).reduce(
+            (s, it) =>
+              s +
+              (it.condition === 'ReusableGood' && it.disposition === 'ReturnToUsableStock'
+                ? it.returnedQuantity || 0
+                : 0),
+            0
+          )
+        );
+        const totalNonReusableQty = round2(
+          (ret.items || []).reduce(
+            (s, it) =>
+              s +
+              (it.condition === 'Damaged' || it.condition === 'UnusableScrap'
+                ? it.returnedQuantity || 0
+                : 0),
+            0
+          )
+        );
+
+        upsertNotification({
+          eventKey: `RET_${ret.status.toUpperCase()}_${ret.id}`,
+          category: 'MaterialReturn',
+          eventType: `MaterialReturn${ret.status}`,
+          severity: ret.status === 'Posted' ? 'Success' : 'Info',
+          title: `Site Return ${ret.returnNumber} — ${ret.status}`,
+          message: `Material return ${ret.returnNumber} against ${ret.materialIssueNumber} at ${ret.warehouseName} is now '${ret.status}' (Reusable: ${totalReusableQty}, Damaged/Scrap: ${totalNonReusableQty}).`,
+          sourceDocumentType: 'MaterialReturn',
+          sourceDocumentId: ret.id,
+          sourceDocumentNumber: ret.returnNumber,
+          targetRoute: `/material-returns/${ret.id}`,
+          projectId: ret.projectId,
+          projectName: ret.projectName,
+          warehouseId: ret.warehouseId,
+          warehouseName: ret.warehouseName,
+          recipientUserIds: [ret.createdByUserId],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager'],
+          createdAtUtc: ret.postedAtUtc || ret.updatedAtUtc || ret.createdAtUtc || nowUtc,
+        });
+      }
+    }
+
+    // 5. Stock Transfer Events (Approved, Dispatched, Received, Delayed, Discrepancy)
+    for (const trf of transfers) {
+      const baseRecipients = [
+        trf.createdByUserId,
+        ...(trf.approvedByUserId ? [trf.approvedByUserId] : []),
+        ...(trf.dispatchedByUserId ? [trf.dispatchedByUserId] : []),
+        ...(trf.receivedByUserId ? [trf.receivedByUserId] : []),
+      ];
+
+      const totalDispatchedQuantity = round2(
+        (trf.items || []).reduce((s, it) => s + (it.dispatchedQuantity || 0), 0)
+      );
+      const totalTransferValue = round2(
+        (trf.items || []).reduce(
+          (s, it) =>
+            s +
+            (it.totalDispatchedAmount ||
+              round2((it.dispatchedQuantity || 0) * (it.unitCostAtDispatch || 0))),
+          0
+        )
+      );
+      const totalReceivedGoodQuantity = round2(
+        (trf.items || []).reduce((s, it) => s + (it.receivedGoodQuantity || 0), 0)
+      );
+      const totalDamagedQuantity = round2(
+        (trf.items || []).reduce((s, it) => s + (it.damagedQuantity || 0), 0)
+      );
+      const totalShortQuantity = round2(
+        (trf.items || []).reduce((s, it) => s + (it.shortQuantity || 0), 0)
+      );
+      const totalDisputedQuantity = round2(
+        (trf.items || []).reduce((s, it) => s + (it.disputedQuantity || 0), 0)
+      );
+
+      if (trf.status === 'Approved') {
+        upsertNotification({
+          eventKey: `STF_APPROVED_${trf.id}`,
+          category: 'StockTransfer',
+          eventType: 'StockTransferApproved',
+          severity: 'Success',
+          title: `Stock Transfer ${trf.transferNumber} Approved`,
+          message: `Transfer ${trf.transferNumber} from ${trf.sourceWarehouseName} to ${trf.destinationWarehouseName} is approved for dispatch.`,
+          sourceDocumentType: 'StockTransferNote',
+          sourceDocumentId: trf.id,
+          sourceDocumentNumber: trf.transferNumber,
+          targetRoute: `/stock-transfers/${trf.id}`,
+          projectId: trf.sourceProjectId,
+          projectName: trf.sourceProjectName,
+          warehouseId: trf.sourceWarehouseId,
+          warehouseName: trf.sourceWarehouseName,
+          secondaryProjectId: trf.destinationProjectId,
+          secondaryWarehouseId: trf.destinationWarehouseId,
+          recipientUserIds: baseRecipients,
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager'],
+          createdAtUtc: trf.approvedAtUtc || trf.updatedAtUtc || nowUtc,
+        });
+      } else if (trf.status === 'Dispatched') {
+        upsertNotification({
+          eventKey: `STF_DISPATCHED_${trf.id}`,
+          category: 'StockTransfer',
+          eventType: 'StockTransferDispatched',
+          severity: 'Info',
+          title: `Transfer ${trf.transferNumber} Dispatched (In Transit)`,
+          message: `${totalDispatchedQuantity} units ($${totalTransferValue.toLocaleString()}) dispatched from ${trf.sourceWarehouseName} to ${trf.destinationWarehouseName}. Awaiting destination receipt verification.`,
+          sourceDocumentType: 'StockTransferNote',
+          sourceDocumentId: trf.id,
+          sourceDocumentNumber: trf.transferNumber,
+          targetRoute: `/stock-transfers/${trf.id}`,
+          projectId: trf.destinationProjectId,
+          projectName: trf.destinationProjectName,
+          warehouseId: trf.destinationWarehouseId,
+          warehouseName: trf.destinationWarehouseName,
+          secondaryProjectId: trf.sourceProjectId,
+          secondaryWarehouseId: trf.sourceWarehouseId,
+          recipientUserIds: baseRecipients,
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager'],
+          createdAtUtc: trf.dispatchedAtUtc || trf.updatedAtUtc || nowUtc,
+        });
+      } else if (['PartiallyReceived', 'Received', 'Completed'].includes(trf.status)) {
+        upsertNotification({
+          eventKey: `STF_${trf.status.toUpperCase()}_${trf.id}`,
+          category: 'StockTransfer',
+          eventType: `StockTransfer${trf.status}`,
+          severity: 'Success',
+          title: `Transfer ${trf.transferNumber} — ${trf.status}`,
+          message: `Transfer ${trf.transferNumber} to ${trf.destinationWarehouseName} recorded ${totalReceivedGoodQuantity} good units received.`,
+          sourceDocumentType: 'StockTransferNote',
+          sourceDocumentId: trf.id,
+          sourceDocumentNumber: trf.transferNumber,
+          targetRoute: `/stock-transfers/${trf.id}`,
+          projectId: trf.destinationProjectId,
+          projectName: trf.destinationProjectName,
+          warehouseId: trf.destinationWarehouseId,
+          warehouseName: trf.destinationWarehouseName,
+          secondaryProjectId: trf.sourceProjectId,
+          secondaryWarehouseId: trf.sourceWarehouseId,
+          recipientUserIds: baseRecipients,
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager'],
+          createdAtUtc: trf.receivedAtUtc || trf.completedAtUtc || trf.updatedAtUtc || nowUtc,
+        });
+      }
+
+      // Delayed in-transit check
+      if (
+        ['Dispatched', 'PartiallyReceived'].includes(trf.status) &&
+        trf.expectedArrivalDate &&
+        trf.expectedArrivalDate.slice(0, 10) < todayStr
+      ) {
+        upsertNotification({
+          eventKey: `STF_DELAYED_${trf.id}`,
+          category: 'StockTransfer',
+          eventType: 'StockTransferDelayed',
+          severity: 'Warning',
+          title: `In-Transit Shipment Delayed: ${trf.transferNumber}`,
+          message: `Transfer ${trf.transferNumber} from ${trf.sourceWarehouseName} to ${trf.destinationWarehouseName} passed expected arrival date (${trf.expectedArrivalDate.slice(0, 10)}).`,
+          sourceDocumentType: 'StockTransferNote',
+          sourceDocumentId: trf.id,
+          sourceDocumentNumber: trf.transferNumber,
+          targetRoute: `/stock-transfers/${trf.id}`,
+          projectId: trf.destinationProjectId,
+          projectName: trf.destinationProjectName,
+          warehouseId: trf.destinationWarehouseId,
+          warehouseName: trf.destinationWarehouseName,
+          secondaryProjectId: trf.sourceProjectId,
+          secondaryWarehouseId: trf.sourceWarehouseId,
+          recipientUserIds: baseRecipients,
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager'],
+          createdAtUtc: trf.updatedAtUtc || nowUtc,
+        });
+      }
+
+      // Transfer discrepancy check
+      const trfDiscrepancyQty = totalDamagedQuantity + totalShortQuantity + totalDisputedQuantity;
+      if (trf.discrepancyStatus === 'PendingReview' || trfDiscrepancyQty > 0) {
+        upsertNotification({
+          eventKey: `STF_DISCREPANCY_${trf.id}`,
+          category: 'StockTransfer',
+          eventType: 'StockTransferDiscrepancy',
+          severity: 'Critical',
+          title: `Transfer Transit Discrepancy: ${trf.transferNumber}`,
+          message: `Transfer ${trf.transferNumber} flagged transit loss/damage (Damaged: ${totalDamagedQuantity}, Short: ${totalShortQuantity}, Disputed: ${totalDisputedQuantity}). Status: ${trf.discrepancyStatus || 'PendingReview'}.`,
+          sourceDocumentType: 'StockTransferNote',
+          sourceDocumentId: trf.id,
+          sourceDocumentNumber: trf.transferNumber,
+          targetRoute: `/stock-transfers/${trf.id}`,
+          projectId: trf.destinationProjectId,
+          projectName: trf.destinationProjectName,
+          warehouseId: trf.destinationWarehouseId,
+          warehouseName: trf.destinationWarehouseName,
+          secondaryProjectId: trf.sourceProjectId,
+          secondaryWarehouseId: trf.sourceWarehouseId,
+          recipientUserIds: baseRecipients,
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper'],
+          createdAtUtc: trf.receivedAtUtc || trf.updatedAtUtc || nowUtc,
+        });
+      }
+    }
+
+    // 6. Low-Stock Alerts based on configured material thresholds
+    for (const b of balances) {
+      const mat = materials.find((m) => m.id === b.materialId || m.itemCode === b.materialCode);
+      if (!mat || !mat.isActive) continue;
+      if (mat.reorderLevel > 0 && b.quantityOnHand <= mat.reorderLevel) {
+        const isCritical = b.quantityOnHand <= mat.minimumStockLevel;
+        upsertNotification({
+          eventKey: `LOW_STOCK_${b.materialId}_${b.warehouseId}_${b.projectId}`,
+          category: 'LowStock',
+          eventType: isCritical ? 'CriticalStockAlert' : 'LowStockAlert',
+          severity: isCritical ? 'Critical' : 'Warning',
+          title: `${isCritical ? 'Critical Minimum Stock' : 'Reorder Threshold'} Alert: ${b.materialCode}`,
+          message: `${b.materialName} at ${b.warehouseName} (${b.projectName}) has ${b.quantityOnHand} ${b.unitCode} usable on-hand (Reorder Level: ${mat.reorderLevel} ${b.unitCode}, Min: ${mat.minimumStockLevel} ${b.unitCode}).`,
+          sourceDocumentType: 'InventoryBalance',
+          sourceDocumentId: b.id,
+          sourceDocumentNumber: b.materialCode,
+          targetRoute: `/reports?type=low-stock-reorder&warehouseId=${b.warehouseId}&projectId=${b.projectId}`,
+          projectId: b.projectId,
+          projectName: b.projectName,
+          warehouseId: b.warehouseId,
+          warehouseName: b.warehouseName,
+          recipientUserIds: [],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'Storekeeper', 'ProjectManager'],
+          createdAtUtc: b.lastUpdatedUtc || nowUtc,
+        });
+      }
+    }
+
+    // 7. Incomplete / Unreconciled Posting Warnings
+    for (const rcpt of receiptLedger) {
+      if (!rcpt.reconciledWithInventoryLedger) {
+        upsertNotification({
+          eventKey: `RECON_WARN_RCPT_${rcpt.id}`,
+          category: 'Reconciliation',
+          eventType: 'ReconciliationWarning',
+          severity: 'Critical',
+          title: `Unreconciled Receipt Ledger Entry: ${rcpt.grnNumber}`,
+          message: `Receipt ledger entry ${rcpt.id} for GRN ${rcpt.grnNumber} has not been reconciled with the authoritative stock ledger.`,
+          sourceDocumentType: 'ReceiptLedger',
+          sourceDocumentId: rcpt.grnId,
+          sourceDocumentNumber: rcpt.grnNumber,
+          targetRoute: `/stock-ledger`,
+          projectId: rcpt.projectId,
+          warehouseId: rcpt.warehouseId,
+          recipientUserIds: [],
+          recipientRoles: ['SuperAdmin', 'InventoryManager', 'AccountsOfficer'],
+          createdAtUtc: rcpt.postedAtUtc || nowUtc,
+        });
+      }
+    }
+
+    existing.sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
+
+    if (mutated) {
+      writeJsonAtomic(notificationsFile, existing);
+    }
+
+    return existing;
+  }
+
+  function canUserAccessNotification(user: JwtPayload, n: NotificationRecord): boolean {
+    if (!user) return false;
+    const roles = getUserEffectiveRoles(user);
+
+    // 1. Check location scope isolation
+    const primaryScopeAllowed = canUserReadStrictScope(user, n.projectId, n.warehouseId);
+    const secondaryScopeAllowed =
+      Boolean(n.secondaryProjectId || n.secondaryWarehouseId) &&
+      canUserReadStrictScope(user, n.secondaryProjectId, n.secondaryWarehouseId);
+
+    if (!primaryScopeAllowed && !secondaryScopeAllowed) {
+      return false;
+    }
+
+    // 2. Check recipient role or direct user assignment
+    if (roles.includes('SuperAdmin') || roles.includes('InventoryManager')) {
+      return true;
+    }
+    if (n.recipientUserIds && n.recipientUserIds.includes(user.sub)) {
+      return true;
+    }
+    if (n.recipientRoles && n.recipientRoles.some((r) => roles.includes(r))) {
+      return true;
+    }
+    return false;
+  }
+
+  // GET /api/notifications
+  router.get('/notifications', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user!;
+    const { unreadOnly, category, eventType, projectId, warehouseId, page = '1', pageSize = '25' } = req.query;
+
+    const scopeCheck = validateExplicitScopeFilters(
+      user,
+      projectId as string | undefined,
+      warehouseId as string | undefined
+    );
+    if (!scopeCheck.valid) {
+      return res.status(403).json({
+        success: false,
+        message: scopeCheck.message,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    const allNotifications = syncAndGetNotifications();
+    let visible = allNotifications.filter((n) => canUserAccessNotification(user, n));
+
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      visible = visible.filter((n) => n.projectId === projectId || n.secondaryProjectId === projectId);
+    }
+    if (warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL') {
+      visible = visible.filter((n) => n.warehouseId === warehouseId || n.secondaryWarehouseId === warehouseId);
+    }
+    if (category && typeof category === 'string' && category !== 'ALL') {
+      visible = visible.filter((n) => n.category === category);
+    }
+    if (eventType && typeof eventType === 'string' && eventType !== 'ALL') {
+      visible = visible.filter((n) => n.eventType === eventType);
+    }
+
+    const unreadCount = visible.filter((n) => !n.readByUserIds.includes(user.sub)).length;
+
+    if (unreadOnly === 'true' || unreadOnly === '1') {
+      visible = visible.filter((n) => !n.readByUserIds.includes(user.sub));
+    }
+
+    const pageIndex = Math.max(1, parseInt(page as string, 10) || 1);
+    const size = Math.min(100, Math.max(1, parseInt(pageSize as string, 10) || 25));
+    const totalCount = visible.length;
+    const totalPages = Math.ceil(totalCount / size);
+    const paged = visible.slice((pageIndex - 1) * size, pageIndex * size).map((n) => ({
+      ...n,
+      isRead: n.readByUserIds.includes(user.sub),
+      readAtUtc: n.readTimestampsByUser?.[user.sub] || null,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: paged,
+        unreadCount,
+        pageIndex,
+        pageSize: size,
+        totalCount,
+        totalPages,
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/notifications/unread-count
+  router.get('/notifications/unread-count', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user!;
+    const allNotifications = syncAndGetNotifications();
+    const visible = allNotifications.filter((n) => canUserAccessNotification(user, n));
+    const unreadCount = visible.filter((n) => !n.readByUserIds.includes(user.sub)).length;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        unreadCount,
+        totalAccessibleCount: visible.length,
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // POST /api/notifications/:id/read
+  router.post('/notifications/:id/read', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user!;
+    const allNotifications = syncAndGetNotifications();
+    const n = allNotifications.find((item) => item.id === req.params.id || item.eventKey === req.params.id);
+
+    if (!n) {
+      return res.status(404).json({
+        success: false,
+        message: `Notification '${req.params.id}' was not found`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    if (!canUserAccessNotification(user, n)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to access or update this notification.',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    const nowUtc = new Date().toISOString();
+    if (!n.readByUserIds.includes(user.sub)) {
+      n.readByUserIds.push(user.sub);
+      if (!n.readTimestampsByUser) n.readTimestampsByUser = {};
+      n.readTimestampsByUser[user.sub] = nowUtc;
+      writeJsonAtomic(notificationsFile, allNotifications);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...n,
+        isRead: true,
+        readAtUtc: n.readTimestampsByUser?.[user.sub] || nowUtc,
+      },
+      message: 'Notification marked as read',
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/notifications/read-all
+  router.post('/notifications/read-all', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user!;
+    const { projectId, warehouseId } = req.body || {};
+
+    const scopeCheck = validateExplicitScopeFilters(user, projectId, warehouseId);
+    if (!scopeCheck.valid) {
+      return res.status(403).json({
+        success: false,
+        message: scopeCheck.message,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    const allNotifications = syncAndGetNotifications();
+    const nowUtc = new Date().toISOString();
+    let updatedCount = 0;
+
+    for (const n of allNotifications) {
+      if (!canUserAccessNotification(user, n)) continue;
+      if (projectId && projectId !== 'ALL' && n.projectId !== projectId && n.secondaryProjectId !== projectId) continue;
+      if (warehouseId && warehouseId !== 'ALL' && n.warehouseId !== warehouseId && n.secondaryWarehouseId !== warehouseId) continue;
+
+      if (!n.readByUserIds.includes(user.sub)) {
+        n.readByUserIds.push(user.sub);
+        if (!n.readTimestampsByUser) n.readTimestampsByUser = {};
+        n.readTimestampsByUser[user.sub] = nowUtc;
+        updatedCount++;
+      }
+    }
+
+    if (updatedCount > 0) {
+      writeJsonAtomic(notificationsFile, allNotifications);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: { markedReadCount: updatedCount },
+      message: `${updatedCount} notifications marked as read`,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // ========================================================================
+  // MANAGEMENT DASHBOARD (GET /api/dashboard/summary)
+  // ========================================================================
+  router.get('/dashboard/summary', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    ensureReconciled();
+    const user = req.user!;
+    const { projectId, warehouseId, fromDate, toDate } = req.query;
+
+    const scopeCheck = validateExplicitScopeFilters(
+      user,
+      projectId as string | undefined,
+      warehouseId as string | undefined
+    );
+    if (!scopeCheck.valid) {
+      return res.status(403).json({
+        success: false,
+        message: scopeCheck.message,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    const dateBounds = parseDateFilterBounds(fromDate, toDate);
+    if (!dateBounds.valid) {
+      return res.status(400).json({
+        success: false,
+        message: dateBounds.message,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+    const projects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
+    const balances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+
+    const filterProject = projectId && typeof projectId === 'string' && projectId !== 'ALL' ? projectId : undefined;
+    const filterWarehouse = warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL' ? warehouseId : undefined;
+
+    // 1. Scoped Balances (Authoritative Usable Stock & Valuation)
+    const scopedBalances = balances.filter((b) => {
+      if (!canUserReadStrictScope(user, b.projectId, b.warehouseId)) return false;
+      if (filterProject && b.projectId !== filterProject) return false;
+      if (filterWarehouse && b.warehouseId !== filterWarehouse) return false;
+      return true;
+    });
+
+    // Authoritative usable stock & value — NEVER include in-transit goods in usable stock or inventory value
+    const totalInventoryValue = round2(scopedBalances.reduce((sum, b) => sum + (b.inventoryValue || 0), 0));
+    const totalQuantityOnHand = round2(scopedBalances.reduce((sum, b) => sum + (b.quantityOnHand || 0), 0));
+    const totalQuantityReserved = round2(scopedBalances.reduce((sum, b) => sum + (b.quantityReserved || 0), 0));
+    const totalQuantityAvailable = round2(
+      scopedBalances.reduce(
+        (sum, b) =>
+          sum +
+          (b.quantityAvailable !== undefined
+            ? b.quantityAvailable
+            : Math.max(0, (b.quantityOnHand || 0) - (b.quantityReserved || 0))),
+        0
+      )
+    );
+
+    // 2. Low-Stock Materials based on actual configured thresholds in materials.json
+    const lowStockItems: Array<{
+      balanceId: string;
+      materialId: string;
+      materialCode: string;
+      materialName: string;
+      categoryName: string;
+      unitCode: string;
+      warehouseId: string;
+      warehouseName: string;
+      projectId: string;
+      projectName: string;
+      quantityOnHand: number;
+      quantityAvailable: number;
+      quantityInTransit: number;
+      minimumStockLevel: number;
+      reorderLevel: number;
+      shortfallQuantity: number;
+      weightedAverageCost: number;
+      estimatedReplenishmentCost: number;
+      severity: 'OutOfStock' | 'Critical' | 'Reorder';
+    }> = [];
+
+    for (const b of scopedBalances) {
+      const mat = materials.find((m) => m.id === b.materialId || m.itemCode === b.materialCode);
+      if (!mat || !mat.isActive) continue;
+      if (mat.reorderLevel > 0 && b.quantityOnHand <= mat.reorderLevel) {
+        const shortfall = round2(Math.max(0, mat.reorderLevel - b.quantityOnHand));
+        const severity: 'OutOfStock' | 'Critical' | 'Reorder' =
+          b.quantityOnHand <= 0
+            ? 'OutOfStock'
+            : b.quantityOnHand <= mat.minimumStockLevel
+            ? 'Critical'
+            : 'Reorder';
+        lowStockItems.push({
+          balanceId: b.id,
+          materialId: b.materialId,
+          materialCode: b.materialCode,
+          materialName: b.materialName,
+          categoryName: mat.categoryName || b.categoryName || 'General',
+          unitCode: b.unitCode,
+          warehouseId: b.warehouseId,
+          warehouseName: b.warehouseName,
+          projectId: b.projectId,
+          projectName: b.projectName,
+          quantityOnHand: b.quantityOnHand,
+          quantityAvailable:
+            b.quantityAvailable !== undefined
+              ? b.quantityAvailable
+              : round2(Math.max(0, b.quantityOnHand - (b.quantityReserved || 0))),
+          quantityInTransit: b.quantityInTransit || 0,
+          minimumStockLevel: mat.minimumStockLevel,
+          reorderLevel: mat.reorderLevel,
+          shortfallQuantity: shortfall,
+          weightedAverageCost: b.weightedAverageCost || 0,
+          estimatedReplenishmentCost: round2(shortfall * (b.weightedAverageCost || 0)),
+          severity,
+        });
+      }
+    }
+
+    lowStockItems.sort((a, b) => {
+      const rank = { OutOfStock: 0, Critical: 1, Reorder: 2 };
+      if (rank[a.severity] !== rank[b.severity]) return rank[a.severity] - rank[b.severity];
+      return b.shortfallQuantity - a.shortfallQuantity;
+    });
+
+    // 3. Scoped Operational Workflows
+    const scopedRequisitions = requisitions.filter((r) => {
+      if (!canUserReadStrictScope(user, r.projectId, undefined)) return false;
+      if (filterProject && r.projectId !== filterProject) return false;
+      if (!isDateWithinBounds(r.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) return false;
+      return true;
+    });
+
+    const scopedPurchaseOrders = purchaseOrders.filter((po) => {
+      if (!canUserReadStrictScope(user, po.projectId, undefined)) return false;
+      if (filterProject && po.projectId !== filterProject) return false;
+      if (!isDateWithinBounds(po.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) return false;
+      return true;
+    });
+
+    const scopedGrns = grns.filter((g) => {
+      if (!canUserReadStrictScope(user, g.projectId, g.warehouseId)) return false;
+      if (filterProject && g.projectId !== filterProject) return false;
+      if (filterWarehouse && g.warehouseId !== filterWarehouse) return false;
+      if (!isDateWithinBounds(g.grnDate || g.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) return false;
+      return true;
+    });
+
+    const scopedIssues = issues.filter((iss) => {
+      if (!canUserReadStrictScope(user, iss.projectId, iss.warehouseId)) return false;
+      if (filterProject && iss.projectId !== filterProject) return false;
+      if (filterWarehouse && iss.warehouseId !== filterWarehouse) return false;
+      if (!isDateWithinBounds(iss.issueDate || iss.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) return false;
+      return true;
+    });
+
+    const scopedReturns = returns.filter((ret) => {
+      if (!canUserReadStrictScope(user, ret.projectId, ret.warehouseId)) return false;
+      if (filterProject && ret.projectId !== filterProject) return false;
+      if (filterWarehouse && ret.warehouseId !== filterWarehouse) return false;
+      if (!isDateWithinBounds(ret.returnDate || ret.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) return false;
+      return true;
+    });
+
+    const scopedTransfers = transfers.filter((trf) => {
+      const canSource = canUserReadStrictScope(user, trf.sourceProjectId, trf.sourceWarehouseId);
+      const canDest = canUserReadStrictScope(user, trf.destinationProjectId, trf.destinationWarehouseId);
+      if (!canSource && !canDest) return false;
+      if (filterProject && trf.sourceProjectId !== filterProject && trf.destinationProjectId !== filterProject) {
+        return false;
+      }
+      if (filterWarehouse && trf.sourceWarehouseId !== filterWarehouse && trf.destinationWarehouseId !== filterWarehouse) {
+        return false;
+      }
+      if (!isDateWithinBounds(trf.requestDate || trf.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) {
+        return false;
+      }
+      return true;
+    });
+
+    // Open in-transit quantities & values (strictly separated from usable inventory)
+    let totalInTransitQuantity = 0;
+    let totalInTransitValue = 0;
+    const activeTransitTransfers = scopedTransfers.filter((t) =>
+      ['Dispatched', 'PartiallyReceived'].includes(t.status)
+    );
+    for (const trf of activeTransitTransfers) {
+      for (const item of trf.items) {
+        const accounted =
+          (item.receivedGoodQuantity || 0) +
+          (item.damagedQuantity || 0) +
+          (item.shortQuantity || 0) +
+          (item.disputedQuantity || 0);
+        const rem = round2(Math.max(0, (item.dispatchedQuantity || 0) - accounted));
+        if (rem > 0) {
+          totalInTransitQuantity = round2(totalInTransitQuantity + rem);
+          totalInTransitValue = round2(totalInTransitValue + rem * (item.unitCostAtDispatch || 0));
+        }
+      }
+    }
+
+    // Unresolved discrepancies across GRNs, Stock Transfers, and Material Returns
+    const grnDiscrepanciesCount = scopedGrns.filter(
+      (g) =>
+        (g.totalRejectedQuantity || 0) > 0 ||
+        (g.totalDamagedQuantity || 0) > 0 ||
+        (g.totalShortQuantity || 0) > 0 ||
+        Boolean(g.inspectionChecklist?.discrepancyIdentified)
+    ).length;
+
+    const transferDiscrepanciesCount = scopedTransfers.filter(
+      (t) => t.discrepancyStatus === 'PendingReview'
+    ).length;
+
+    const returnDiscrepanciesCount = scopedReturns.filter((r) => {
+      if (r.status === 'Posted' || r.status === 'Rejected') return false;
+      const nonReusable = (r.items || []).reduce(
+        (s, it) =>
+          s + (it.condition === 'Damaged' || it.condition === 'UnusableScrap' ? it.returnedQuantity || 0 : 0),
+        0
+      );
+      return nonReusable > 0;
+    }).length;
+
+    const unresolvedDiscrepanciesCount =
+      grnDiscrepanciesCount + transferDiscrepanciesCount + returnDiscrepanciesCount;
+
+    // Pending Requisition Approvals & Outstanding Material Issues
+    const pendingRequisitionApprovals = scopedRequisitions.filter((r) => r.status === 'Submitted').length;
+    const unpostedMaterialIssuesCount = scopedIssues.filter((i) =>
+      ['Draft', 'Submitted', 'Approved'].includes(i.status)
+    ).length;
+    const pendingIssueApprovalsCount = scopedIssues.filter((i) => i.status === 'Submitted').length;
+
+    // Pending GRNs / Inspection
+    const pendingGrnsInspection = scopedGrns.filter((g) =>
+      ['Draft', 'SubmittedForInspection', 'Inspected', 'Approved'].includes(g.status)
+    ).length;
+
+    // Open Transfers
+    const openTransfersCount = scopedTransfers.filter((t) =>
+      ['Draft', 'Submitted', 'PendingApproval', 'Approved', 'Dispatched', 'PartiallyReceived'].includes(t.status)
+    ).length;
+
+    // 4. Scoped Stock Ledger Movements
+    const scopedLedger = stockLedger
+      .filter((e) => {
+        if (!canUserReadStrictScope(user, e.projectId, e.warehouseId)) return false;
+        if (filterProject && e.projectId !== filterProject) return false;
+        if (filterWarehouse && e.warehouseId !== filterWarehouse) return false;
+        if (!isDateWithinBounds(e.transactionDate || e.timestampUtc, dateBounds.fromDate, dateBounds.toDate)) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.timestampUtc).getTime() - new Date(a.timestampUtc).getTime());
+
+    const recentMovements = scopedLedger.slice(0, 15);
+
+    // 5. Location Rollup Summaries
+    const locationMap = new Map<
+      string,
+      {
+        warehouseId: string;
+        warehouseName: string;
+        projectId: string;
+        projectName: string;
+        distinctMaterials: number;
+        quantityOnHand: number;
+        quantityAvailable: number;
+        quantityInTransit: number;
+        inventoryValue: number;
+        lowStockCount: number;
+        pendingGrnCount: number;
+        openIssueCount: number;
+        openTransferCount: number;
+      }
+    >();
+
+    for (const b of scopedBalances) {
+      const key = `${b.warehouseId}__${b.projectId}`;
+      let loc = locationMap.get(key);
+      if (!loc) {
+        loc = {
+          warehouseId: b.warehouseId,
+          warehouseName: b.warehouseName || resolveWarehouseName(b.warehouseId),
+          projectId: b.projectId,
+          projectName: b.projectName || resolveProjectName(b.projectId),
+          distinctMaterials: 0,
+          quantityOnHand: 0,
+          quantityAvailable: 0,
+          quantityInTransit: 0,
+          inventoryValue: 0,
+          lowStockCount: 0,
+          pendingGrnCount: 0,
+          openIssueCount: 0,
+          openTransferCount: 0,
+        };
+        locationMap.set(key, loc);
+      }
+      if (b.quantityOnHand > 0) loc.distinctMaterials += 1;
+      loc.quantityOnHand = round2(loc.quantityOnHand + (b.quantityOnHand || 0));
+      loc.quantityAvailable = round2(
+        loc.quantityAvailable +
+          (b.quantityAvailable !== undefined
+            ? b.quantityAvailable
+            : Math.max(0, (b.quantityOnHand || 0) - (b.quantityReserved || 0)))
+      );
+      loc.quantityInTransit = round2(loc.quantityInTransit + (b.quantityInTransit || 0));
+      loc.inventoryValue = round2(loc.inventoryValue + (b.inventoryValue || 0));
+    }
+
+    for (const ls of lowStockItems) {
+      const key = `${ls.warehouseId}__${ls.projectId}`;
+      const loc = locationMap.get(key);
+      if (loc) loc.lowStockCount += 1;
+    }
+
+    for (const g of scopedGrns) {
+      if (['Draft', 'SubmittedForInspection', 'Inspected', 'Approved'].includes(g.status)) {
+        const key = `${g.warehouseId}__${g.projectId}`;
+        const loc = locationMap.get(key);
+        if (loc) loc.pendingGrnCount += 1;
+      }
+    }
+
+    for (const iss of scopedIssues) {
+      if (['Draft', 'Submitted', 'Approved'].includes(iss.status)) {
+        const key = `${iss.warehouseId}__${iss.projectId}`;
+        const loc = locationMap.get(key);
+        if (loc) loc.openIssueCount += 1;
+      }
+    }
+
+    for (const trf of scopedTransfers) {
+      if (['Submitted', 'PendingApproval', 'Approved', 'Dispatched', 'PartiallyReceived'].includes(trf.status)) {
+        const srcKey = `${trf.sourceWarehouseId}__${trf.sourceProjectId}`;
+        const dstKey = `${trf.destinationWarehouseId}__${trf.destinationProjectId}`;
+        const srcLoc = locationMap.get(srcKey);
+        if (srcLoc) srcLoc.openTransferCount += 1;
+        if (dstKey !== srcKey) {
+          const dstLoc = locationMap.get(dstKey);
+          if (dstLoc) dstLoc.openTransferCount += 1;
+        }
+      }
+    }
+
+    const locationSummaries = Array.from(locationMap.values()).sort(
+      (a, b) => b.inventoryValue - a.inventoryValue
+    );
+
+    // 6. Category Valuation Distribution (for accessible chart & tabular breakdown)
+    const categoryMap = new Map<
+      string,
+      {
+        categoryName: string;
+        totalQuantity: number;
+        totalValue: number;
+        itemCount: number;
+      }
+    >();
+
+    for (const b of scopedBalances) {
+      const mat = materials.find((m) => m.id === b.materialId || m.itemCode === b.materialCode);
+      const catName = mat?.categoryName || b.categoryName || 'General Construction Materials';
+      let c = categoryMap.get(catName);
+      if (!c) {
+        c = { categoryName: catName, totalQuantity: 0, totalValue: 0, itemCount: 0 };
+        categoryMap.set(catName, c);
+      }
+      c.totalQuantity = round2(c.totalQuantity + (b.quantityOnHand || 0));
+      c.totalValue = round2(c.totalValue + (b.inventoryValue || 0));
+      c.itemCount += 1;
+    }
+
+    const categoryValuation = Array.from(categoryMap.values())
+      .map((c) => ({
+        ...c,
+        sharePercent: totalInventoryValue > 0 ? round2((c.totalValue / totalInventoryValue) * 100) : 0,
+      }))
+      .sort((a, b) => b.totalValue - a.totalValue);
+
+    // 7. Recent Audit-Relevant Activity Feed
+    const auditFeed: Array<{
+      id: string;
+      timestampUtc: string;
+      module: string;
+      documentNumber: string;
+      documentId: string;
+      action: string;
+      actorName: string;
+      actorRole: string;
+      summary: string;
+      projectId: string;
+      warehouseId?: string;
+      targetRoute: string;
+    }> = [];
+
+    for (const r of scopedRequisitions) {
+      for (const h of r.approvalHistory || []) {
+        if (!isDateWithinBounds(h.timestampUtc, dateBounds.fromDate, dateBounds.toDate)) continue;
+        auditFeed.push({
+          id: `AUD-REQ-${h.id}`,
+          timestampUtc: h.timestampUtc,
+          module: 'Requisition',
+          documentNumber: r.requisitionNumber,
+          documentId: r.id,
+          action: h.action,
+          actorName: h.actorName,
+          actorRole: h.actorRole,
+          summary: h.comments || `${h.action} on ${r.requisitionNumber}`,
+          projectId: r.projectId,
+          targetRoute: `/requisitions/${r.id}`,
+        });
+      }
+    }
+
+    for (const g of scopedGrns) {
+      for (const h of g.auditTrail || []) {
+        if (!isDateWithinBounds(h.timestampUtc, dateBounds.fromDate, dateBounds.toDate)) continue;
+        auditFeed.push({
+          id: `AUD-GRN-${h.id}`,
+          timestampUtc: h.timestampUtc,
+          module: 'GRN',
+          documentNumber: g.grnNumber,
+          documentId: g.id,
+          action: h.action,
+          actorName: h.actorName,
+          actorRole: h.actorRole,
+          summary: h.comments || `${h.action} on ${g.grnNumber}`,
+          projectId: g.projectId,
+          warehouseId: g.warehouseId,
+          targetRoute: `/grns/${g.id}`,
+        });
+      }
+    }
+
+    for (const iss of scopedIssues) {
+      for (const h of iss.auditTrail || []) {
+        if (!isDateWithinBounds(h.timestampUtc, dateBounds.fromDate, dateBounds.toDate)) continue;
+        auditFeed.push({
+          id: `AUD-ISS-${h.id}`,
+          timestampUtc: h.timestampUtc,
+          module: 'Material Issue',
+          documentNumber: iss.issueNumber,
+          documentId: iss.id,
+          action: h.action,
+          actorName: h.actorName,
+          actorRole: h.actorRole,
+          summary: h.comments || `${h.action} on ${iss.issueNumber}`,
+          projectId: iss.projectId,
+          warehouseId: iss.warehouseId,
+          targetRoute: `/material-issues/${iss.id}`,
+        });
+      }
+    }
+
+    for (const trf of scopedTransfers) {
+      for (const h of trf.auditTrail || []) {
+        if (!isDateWithinBounds(h.timestampUtc, dateBounds.fromDate, dateBounds.toDate)) continue;
+        auditFeed.push({
+          id: `AUD-TRF-${h.id}`,
+          timestampUtc: h.timestampUtc,
+          module: 'Stock Transfer',
+          documentNumber: trf.transferNumber,
+          documentId: trf.id,
+          action: h.action,
+          actorName: h.actorName,
+          actorRole: h.actorRole,
+          summary: h.comments || `${h.action} on ${trf.transferNumber}`,
+          projectId: trf.sourceProjectId,
+          warehouseId: trf.sourceWarehouseId,
+          targetRoute: `/stock-transfers/${trf.id}`,
+        });
+      }
+    }
+
+    auditFeed.sort((a, b) => new Date(b.timestampUtc).getTime() - new Date(a.timestampUtc).getTime());
+
+    // Accessible filter options for current user
+    const accessibleProjects = projects.filter((p) => p.isActive && canUserAccessProject(user, p.id));
+    const allWarehouses = [
+      { id: 'WH-01', name: 'Metro Central Staging Yard', projectId: 'PRJ-101' },
+      { id: 'WH-02', name: 'North Industrial Depot & Yard', projectId: 'PRJ-101' },
+      { id: 'WH-03', name: 'East Harbor Hub', projectId: 'PRJ-102' },
+    ];
+    const accessibleWarehouses = allWarehouses.filter((w) => canUserAccessWarehouse(user, w.id));
+
+    const nowUtc = new Date().toISOString();
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        asOfTimestampUtc: nowUtc,
+        filtersApplied: {
+          projectId: filterProject || 'ALL',
+          warehouseId: filterWarehouse || 'ALL',
+          fromDate: dateBounds.fromDate || null,
+          toDate: dateBounds.toDate || null,
+        },
+        accessibleScopes: {
+          projects: accessibleProjects,
+          warehouses: accessibleWarehouses,
+        },
+        kpis: {
+          totalInventoryValue,
+          totalQuantityOnHand,
+          totalQuantityReserved,
+          totalQuantityAvailable,
+          totalInTransitQuantity,
+          totalInTransitValue,
+          distinctMaterialsCount: new Set(scopedBalances.filter((b) => b.quantityOnHand > 0).map((b) => b.materialId)).size,
+          activeLocationsCount: locationSummaries.length,
+          lowStockCount: lowStockItems.length,
+          criticalStockCount: lowStockItems.filter((i) => i.severity === 'OutOfStock' || i.severity === 'Critical').length,
+          pendingRequisitionApprovals,
+          outstandingMaterialIssues: unpostedMaterialIssuesCount,
+          pendingIssueApprovalsCount,
+          pendingGrnsInspection,
+          openTransfersCount,
+          inTransitTransfersCount: activeTransitTransfers.length,
+          unresolvedDiscrepanciesCount,
+          grnDiscrepanciesCount,
+          transferDiscrepanciesCount,
+          returnDiscrepanciesCount,
+          pendingPoApprovalsCount: scopedPurchaseOrders.filter((p) => p.status === 'PendingApproval').length,
+        },
+        lowStockItems,
+        locationSummaries,
+        categoryValuation,
+        recentMovements,
+        recentAuditActivity: auditFeed.slice(0, 15),
+      },
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // ========================================================================
+  // UNIFIED SCOPED REPORTS & RFC 4180 CSV EXPORT ENGINE
+  // ========================================================================
+
+  interface ReportColumnDef {
+    key: string;
+    header: string;
+    align?: 'left' | 'right' | 'center';
+  }
+
+  interface GeneratedReportPayload {
+    reportType: string;
+    title: string;
+    subtitle: string;
+    asOfTimestampUtc: string;
+    filtersApplied: Record<string, any>;
+    summary: Record<string, any>;
+    columns: ReportColumnDef[];
+    allRows: Array<Record<string, any>>;
+  }
+
+  function escapeCsvCell(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  }
+
+  function buildCsvDocument(columns: ReportColumnDef[], rows: Array<Record<string, any>>): string {
+    const headerLine = columns.map((col) => escapeCsvCell(col.header)).join(',');
+    const dataLines = rows.map((row) =>
+      columns.map((col) => escapeCsvCell(row[col.key])).join(',')
+    );
+    return [headerLine, ...dataLines].join('\r\n');
+  }
+
+  function buildScopedReportData(
+    reportType: string,
+    user: JwtPayload,
+    query: Record<string, any>
+  ): { status: number; message?: string; report?: GeneratedReportPayload } {
+    ensureReconciled();
+
+    const {
+      projectId,
+      warehouseId,
+      materialId,
+      supplierId,
+      status,
+      search,
+      fromDate,
+      toDate,
+    } = query;
+
+    const scopeCheck = validateExplicitScopeFilters(
+      user,
+      projectId as string | undefined,
+      warehouseId as string | undefined
+    );
+    if (!scopeCheck.valid) {
+      return { status: 403, message: scopeCheck.message };
+    }
+
+    const dateBounds = parseDateFilterBounds(fromDate, toDate);
+    if (!dateBounds.valid) {
+      return { status: 400, message: dateBounds.message };
+    }
+
+    const filterProject = projectId && typeof projectId === 'string' && projectId !== 'ALL' ? projectId : undefined;
+    const filterWarehouse = warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL' ? warehouseId : undefined;
+    const filterMaterial = materialId && typeof materialId === 'string' && materialId !== 'ALL' ? materialId : undefined;
+    const filterSupplier = supplierId && typeof supplierId === 'string' && supplierId !== 'ALL' ? supplierId : undefined;
+    const filterStatus = status && typeof status === 'string' && status !== 'ALL' ? status : undefined;
+    const searchTerm = search && typeof search === 'string' && search.trim() ? search.trim().toUpperCase() : undefined;
+
+    const nowUtc = new Date().toISOString();
+    const filtersApplied = {
+      projectId: filterProject || 'ALL',
+      warehouseId: filterWarehouse || 'ALL',
+      materialId: filterMaterial || 'ALL',
+      supplierId: filterSupplier || 'ALL',
+      status: filterStatus || 'ALL',
+      search: searchTerm || '',
+      fromDate: dateBounds.fromDate || null,
+      toDate: dateBounds.toDate || null,
+    };
+
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+    const balances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const issues = readJsonSafe<MaterialIssueRecord[]>(materialIssuesFile, []);
+    const returns = readJsonSafe<MaterialReturnRecord[]>(materialReturnsFile, []);
+    const transfers = readJsonSafe<StockTransferRecord[]>(stockTransfersFile, []);
+
+    // 1. STOCK BALANCES BY MATERIAL AND WAREHOUSE/SITE
+    if (reportType === 'stock-balances') {
+      let rows = balances
+        .filter((b) => {
+          if (!canUserReadStrictScope(user, b.projectId, b.warehouseId)) return false;
+          if (filterProject && b.projectId !== filterProject) return false;
+          if (filterWarehouse && b.warehouseId !== filterWarehouse) return false;
+          if (filterMaterial && b.materialId !== filterMaterial && b.materialCode !== filterMaterial) return false;
+          if (searchTerm) {
+            const hay = `${b.materialCode} ${b.materialName} ${b.warehouseName} ${b.projectName}`.toUpperCase();
+            if (!hay.includes(searchTerm)) return false;
+          }
+          return true;
+        })
+        .map((b) => {
+          const mat = materials.find((m) => m.id === b.materialId || m.itemCode === b.materialCode);
+          const available =
+            b.quantityAvailable !== undefined
+              ? b.quantityAvailable
+              : round2(Math.max(0, (b.quantityOnHand || 0) - (b.quantityReserved || 0)));
+          const reorderLvl = mat?.reorderLevel ?? 0;
+          const minLvl = mat?.minimumStockLevel ?? 0;
+          const stockStatus =
+            b.quantityOnHand <= 0
+              ? 'OutOfStock'
+              : reorderLvl > 0 && b.quantityOnHand <= minLvl
+              ? 'Critical'
+              : reorderLvl > 0 && b.quantityOnHand <= reorderLvl
+              ? 'LowStock'
+              : 'Healthy';
+
+          return {
+            id: b.id,
+            materialId: b.materialId,
+            materialCode: b.materialCode,
+            materialName: b.materialName,
+            categoryName: mat?.categoryName || b.categoryName || 'General',
+            unitCode: b.unitCode,
+            warehouseId: b.warehouseId,
+            warehouseName: b.warehouseName,
+            projectId: b.projectId,
+            projectName: b.projectName,
+            quantityOnHand: b.quantityOnHand,
+            quantityReserved: b.quantityReserved || 0,
+            quantityAvailable: available,
+            quantityInTransit: b.quantityInTransit || 0,
+            weightedAverageCost: b.weightedAverageCost || 0,
+            inventoryValue: b.inventoryValue || 0,
+            minimumStockLevel: minLvl,
+            reorderLevel: reorderLvl,
+            stockStatus,
+            lastUpdatedUtc: b.lastUpdatedUtc,
+          };
+        });
+
+      if (filterStatus) {
+        rows = rows.filter((r) => r.stockStatus === filterStatus);
+      }
+
+      rows.sort((a, b) => a.materialCode.localeCompare(b.materialCode) || a.warehouseId.localeCompare(b.warehouseId));
+
+      return {
+        status: 200,
+        report: {
+          reportType,
+          title: 'Stock Balance by Material & Warehouse/Site',
+          subtitle: 'Authoritative usable on-hand stock, reserved allocations, and separated in-transit quantities.',
+          asOfTimestampUtc: nowUtc,
+          filtersApplied,
+          summary: {
+            totalRecords: rows.length,
+            totalQuantityOnHand: round2(rows.reduce((s, r) => s + r.quantityOnHand, 0)),
+            totalQuantityReserved: round2(rows.reduce((s, r) => s + r.quantityReserved, 0)),
+            totalQuantityAvailable: round2(rows.reduce((s, r) => s + r.quantityAvailable, 0)),
+            totalQuantityInTransit: round2(rows.reduce((s, r) => s + r.quantityInTransit, 0)),
+            totalInventoryValue: round2(rows.reduce((s, r) => s + r.inventoryValue, 0)),
+            currency: 'USD',
+          },
+          columns: [
+            { key: 'materialCode', header: 'Material Code' },
+            { key: 'materialName', header: 'Material Name' },
+            { key: 'categoryName', header: 'Category' },
+            { key: 'warehouseId', header: 'Warehouse ID' },
+            { key: 'warehouseName', header: 'Warehouse / Store' },
+            { key: 'projectId', header: 'Project ID' },
+            { key: 'projectName', header: 'Project Site' },
+            { key: 'unitCode', header: 'UOM' },
+            { key: 'quantityOnHand', header: 'Usable On Hand', align: 'right' },
+            { key: 'quantityReserved', header: 'Reserved Qty', align: 'right' },
+            { key: 'quantityAvailable', header: 'Available Qty', align: 'right' },
+            { key: 'quantityInTransit', header: 'In-Transit Qty (Non-Usable)', align: 'right' },
+            { key: 'weightedAverageCost', header: 'Moving WAC ($)', align: 'right' },
+            { key: 'inventoryValue', header: 'Total Valuation ($)', align: 'right' },
+            { key: 'stockStatus', header: 'Stock Status' },
+          ],
+          allRows: rows,
+        },
+      };
+    }
+
+    // 2. INVENTORY VALUATION USING WEIGHTED-AVERAGE COSTING (WAC)
+    if (reportType === 'inventory-valuation') {
+      const scopedBalances = balances.filter((b) => {
+        if (!canUserReadStrictScope(user, b.projectId, b.warehouseId)) return false;
+        if (filterProject && b.projectId !== filterProject) return false;
+        if (filterWarehouse && b.warehouseId !== filterWarehouse) return false;
+        if (filterMaterial && b.materialId !== filterMaterial && b.materialCode !== filterMaterial) return false;
+        if (searchTerm) {
+          const hay = `${b.materialCode} ${b.materialName} ${b.warehouseName} ${b.projectName}`.toUpperCase();
+          if (!hay.includes(searchTerm)) return false;
+        }
+        return true;
+      });
+
+      const totalPortfolioValue = round2(scopedBalances.reduce((s, b) => s + (b.inventoryValue || 0), 0));
+
+      const rows = scopedBalances
+        .map((b) => {
+          const mat = materials.find((m) => m.id === b.materialId || m.itemCode === b.materialCode);
+          const sharePct = totalPortfolioValue > 0 ? round2(((b.inventoryValue || 0) / totalPortfolioValue) * 100) : 0;
+          return {
+            id: b.id,
+            materialId: b.materialId,
+            materialCode: b.materialCode,
+            materialName: b.materialName,
+            categoryName: mat?.categoryName || b.categoryName || 'General',
+            unitCode: b.unitCode,
+            warehouseId: b.warehouseId,
+            warehouseName: b.warehouseName,
+            projectId: b.projectId,
+            projectName: b.projectName,
+            quantityOnHand: b.quantityOnHand,
+            weightedAverageCost: b.weightedAverageCost || 0,
+            inventoryValue: b.inventoryValue || 0,
+            valuationMethod: 'Moving Weighted Average (WAC)',
+            portfolioSharePercent: sharePct,
+            lastUpdatedUtc: b.lastUpdatedUtc,
+          };
+        })
+        .sort((a, b) => b.inventoryValue - a.inventoryValue);
+
+      return {
+        status: 200,
+        report: {
+          reportType,
+          title: 'Inventory Valuation Statement (Moving WAC)',
+          subtitle: 'Financial valuation of usable on-hand stock using Moving Weighted-Average Costing.',
+          asOfTimestampUtc: nowUtc,
+          filtersApplied,
+          summary: {
+            totalRecords: rows.length,
+            totalQuantityOnHand: round2(rows.reduce((s, r) => s + r.quantityOnHand, 0)),
+            totalInventoryValue: totalPortfolioValue,
+            valuationPolicy: 'Moving Weighted Average Cost (SOP FIN-WAC-01)',
+            currency: 'USD',
+          },
+          columns: [
+            { key: 'materialCode', header: 'Material Code' },
+            { key: 'materialName', header: 'Material Name' },
+            { key: 'categoryName', header: 'Category' },
+            { key: 'warehouseName', header: 'Warehouse / Store' },
+            { key: 'projectName', header: 'Project Site' },
+            { key: 'unitCode', header: 'UOM' },
+            { key: 'quantityOnHand', header: 'Quantity On Hand', align: 'right' },
+            { key: 'weightedAverageCost', header: 'Unit WAC ($)', align: 'right' },
+            { key: 'inventoryValue', header: 'Extended Valuation ($)', align: 'right' },
+            { key: 'portfolioSharePercent', header: 'Value Share (%)', align: 'right' },
+            { key: 'valuationMethod', header: 'Valuation Basis' },
+          ],
+          allRows: rows,
+        },
+      };
+    }
+
+    // 3. STOCK LEDGER AND MOVEMENT HISTORY
+    if (reportType === 'stock-ledger') {
+      const rows = stockLedger
+        .filter((e) => {
+          if (!canUserReadStrictScope(user, e.projectId, e.warehouseId)) return false;
+          if (filterProject && e.projectId !== filterProject) return false;
+          if (filterWarehouse && e.warehouseId !== filterWarehouse) return false;
+          if (filterMaterial && e.materialId !== filterMaterial && e.materialCode !== filterMaterial) return false;
+          if (filterStatus && e.transactionType !== filterStatus) return false;
+          if (!isDateWithinBounds(e.transactionDate || e.timestampUtc, dateBounds.fromDate, dateBounds.toDate)) {
+            return false;
+          }
+          if (searchTerm) {
+            const hay = `${e.referenceNumber} ${e.sourceDocumentNumber} ${e.materialCode} ${e.materialName} ${e.transactionType} ${e.remarks || ''}`.toUpperCase();
+            if (!hay.includes(searchTerm)) return false;
+          }
+          return true;
+        })
+        .sort((a, b) => new Date(b.timestampUtc).getTime() - new Date(a.timestampUtc).getTime())
+        .map((e) => ({
+          id: e.id,
+          referenceNumber: e.referenceNumber,
+          transactionDate: e.transactionDate || e.timestampUtc.slice(0, 10),
+          timestampUtc: e.timestampUtc,
+          transactionType: e.transactionType,
+          sourceDocumentType: e.sourceDocumentType,
+          sourceDocumentNumber: e.sourceDocumentNumber,
+          materialCode: e.materialCode,
+          materialName: e.materialName,
+          unitCode: e.unitCode,
+          warehouseId: e.warehouseId,
+          warehouseName: e.warehouseName,
+          projectId: e.projectId,
+          projectName: e.projectName,
+          quantityIn: e.quantityIn || 0,
+          quantityOut: e.quantityOut || 0,
+          signedQuantity: e.signedQuantity,
+          unitCost: e.unitCost,
+          transactionValue: e.transactionValue,
+          balanceQuantityAfter: e.balanceQuantityAfter,
+          weightedAverageCostAfter: e.weightedAverageCostAfter,
+          totalValuationAfter: e.totalValuationAfter,
+          createdByName: e.createdByName,
+          remarks: e.remarks || '',
+        }));
+
+      return {
+        status: 200,
+        report: {
+          reportType,
+          title: 'Stock Ledger & Movement History Report',
+          subtitle: 'Immutable chronological audit trail of all posted stock receipts, issues, returns, and transfers.',
+          asOfTimestampUtc: nowUtc,
+          filtersApplied,
+          summary: {
+            totalTransactions: rows.length,
+            totalQuantityIn: round2(rows.reduce((s, r) => s + r.quantityIn, 0)),
+            totalQuantityOut: round2(rows.reduce((s, r) => s + r.quantityOut, 0)),
+            netSignedQuantity: round2(rows.reduce((s, r) => s + r.signedQuantity, 0)),
+            totalInboundValue: round2(rows.filter((r) => r.quantityIn > 0).reduce((s, r) => s + Math.abs(r.transactionValue), 0)),
+            totalOutboundValue: round2(rows.filter((r) => r.quantityOut > 0).reduce((s, r) => s + Math.abs(r.transactionValue), 0)),
+            currency: 'USD',
+          },
+          columns: [
+            { key: 'referenceNumber', header: 'Ledger Ref' },
+            { key: 'transactionDate', header: 'Date' },
+            { key: 'transactionType', header: 'Movement Type' },
+            { key: 'sourceDocumentNumber', header: 'Source Voucher' },
+            { key: 'materialCode', header: 'Material Code' },
+            { key: 'materialName', header: 'Material Name' },
+            { key: 'warehouseName', header: 'Warehouse' },
+            { key: 'projectName', header: 'Project Site' },
+            { key: 'unitCode', header: 'UOM' },
+            { key: 'quantityIn', header: 'Qty In', align: 'right' },
+            { key: 'quantityOut', header: 'Qty Out', align: 'right' },
+            { key: 'signedQuantity', header: 'Net Delta', align: 'right' },
+            { key: 'unitCost', header: 'Unit Cost ($)', align: 'right' },
+            { key: 'transactionValue', header: 'Movement Value ($)', align: 'right' },
+            { key: 'balanceQuantityAfter', header: 'Running Balance', align: 'right' },
+            { key: 'createdByName', header: 'Posted By' },
+            { key: 'remarks', header: 'Audit Remarks' },
+          ],
+          allRows: rows,
+        },
+      };
+    }
+
+    // 4. GRN RECEIPTS & SUPPLIER / PO OUTSTANDING QUANTITIES
+    if (reportType === 'grn-po-summary') {
+      const rows: Array<Record<string, any>> = [];
+
+      for (const po of purchaseOrders) {
+        if (!canUserReadStrictScope(user, po.projectId, undefined)) continue;
+        if (filterProject && po.projectId !== filterProject) continue;
+        if (filterSupplier && po.supplierId !== filterSupplier && po.supplierCode !== filterSupplier) continue;
+        if (filterStatus && po.status !== filterStatus) continue;
+        if (!isDateWithinBounds(po.orderDate || po.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) continue;
+
+        const linkedGrns = grns.filter(
+          (g) =>
+            g.purchaseOrderId === po.id &&
+            canUserReadStrictScope(user, g.projectId, g.warehouseId) &&
+            (!filterWarehouse || g.warehouseId === filterWarehouse)
+        );
+
+        for (const item of po.items) {
+          if (filterMaterial && item.materialId !== filterMaterial && item.materialCode !== filterMaterial) continue;
+
+          let grnDeliveredQty = 0;
+          let grnAcceptedQty = 0;
+          let grnRejectedQty = 0;
+          for (const g of linkedGrns) {
+            for (const gi of g.items) {
+              if (gi.purchaseOrderItemId === item.id || gi.materialId === item.materialId) {
+                grnDeliveredQty += gi.deliveredQuantity || 0;
+                if (g.status === 'Posted') {
+                  grnAcceptedQty += gi.acceptedQuantity || 0;
+                }
+                grnRejectedQty += gi.rejectedQuantity || 0;
+              }
+            }
+          }
+
+          const row = {
+            id: `${po.id}_${item.id}`,
+            poNumber: po.poNumber,
+            orderDate: po.orderDate || po.createdAtUtc.slice(0, 10),
+            poStatus: po.status,
+            supplierCode: po.supplierCode,
+            supplierName: po.supplierName,
+            projectId: po.projectId,
+            projectName: po.projectName,
+            materialCode: item.materialCode,
+            materialName: item.materialName,
+            unitCode: item.unitCode,
+            orderedQuantity: item.orderedQuantity,
+            receivedQuantity: item.receivedQuantity,
+            outstandingQuantity: item.outstandingQuantity,
+            grnRejectedQuantity: round2(grnRejectedQty),
+            unitRate: item.unitRate,
+            orderedValue: item.lineTotal,
+            receivedValue: round2(item.receivedQuantity * item.unitRate),
+            outstandingValue: round2(item.outstandingQuantity * item.unitRate),
+            grnCount: linkedGrns.length,
+          };
+
+          if (searchTerm) {
+            const hay = `${row.poNumber} ${row.supplierName} ${row.materialCode} ${row.materialName} ${row.projectName}`.toUpperCase();
+            if (!hay.includes(searchTerm)) continue;
+          }
+
+          rows.push(row);
+        }
+      }
+
+      return {
+        status: 200,
+        report: {
+          reportType,
+          title: 'GRN Receipts & Supplier PO Outstanding Report',
+          subtitle: 'Line-level reconciliation of Purchase Orders, posted GRN receipts, rejected deliveries, and open vendor backlogs.',
+          asOfTimestampUtc: nowUtc,
+          filtersApplied,
+          summary: {
+            totalPoLines: rows.length,
+            totalOrderedQuantity: round2(rows.reduce((s, r) => s + r.orderedQuantity, 0)),
+            totalReceivedQuantity: round2(rows.reduce((s, r) => s + r.receivedQuantity, 0)),
+            totalOutstandingQuantity: round2(rows.reduce((s, r) => s + r.outstandingQuantity, 0)),
+            totalRejectedQuantity: round2(rows.reduce((s, r) => s + r.grnRejectedQuantity, 0)),
+            totalOrderedValue: round2(rows.reduce((s, r) => s + r.orderedValue, 0)),
+            totalReceivedValue: round2(rows.reduce((s, r) => s + r.receivedValue, 0)),
+            totalOutstandingCommitmentValue: round2(rows.reduce((s, r) => s + r.outstandingValue, 0)),
+            currency: 'USD',
+          },
+          columns: [
+            { key: 'poNumber', header: 'PO Number' },
+            { key: 'orderDate', header: 'Order Date' },
+            { key: 'poStatus', header: 'PO Status' },
+            { key: 'supplierName', header: 'Supplier' },
+            { key: 'projectName', header: 'Project Site' },
+            { key: 'materialCode', header: 'Material Code' },
+            { key: 'materialName', header: 'Material Name' },
+            { key: 'unitCode', header: 'UOM' },
+            { key: 'orderedQuantity', header: 'Ordered Qty', align: 'right' },
+            { key: 'receivedQuantity', header: 'Accepted Qty', align: 'right' },
+            { key: 'grnRejectedQuantity', header: 'Rejected Qty', align: 'right' },
+            { key: 'outstandingQuantity', header: 'Open PO Qty', align: 'right' },
+            { key: 'unitRate', header: 'PO Unit Rate ($)', align: 'right' },
+            { key: 'receivedValue', header: 'Received Value ($)', align: 'right' },
+            { key: 'outstandingValue', header: 'Open Commitment ($)', align: 'right' },
+          ],
+          allRows: rows,
+        },
+      };
+    }
+
+    // 5. MATERIAL ISSUES, RETURNS & NET PROJECT/SITE CONSUMPTION
+    if (reportType === 'consumption-issues-returns') {
+      const consumptionMap = new Map<
+        string,
+        {
+          id: string;
+          projectId: string;
+          projectName: string;
+          warehouseId: string;
+          warehouseName: string;
+          materialId: string;
+          materialCode: string;
+          materialName: string;
+          unitCode: string;
+          grossIssuedQuantity: number;
+          grossIssuedValue: number;
+          returnedReusableQuantity: number;
+          returnedReusableValue: number;
+          damagedOrScrapReturnQty: number;
+          netConsumedQuantity: number;
+          netConsumedValue: number;
+          issueVoucherCount: number;
+          returnVoucherCount: number;
+        }
+      >();
+
+      for (const iss of issues) {
+        if (iss.status !== 'Posted') continue;
+        if (!canUserReadStrictScope(user, iss.projectId, iss.warehouseId)) continue;
+        if (filterProject && iss.projectId !== filterProject) continue;
+        if (filterWarehouse && iss.warehouseId !== filterWarehouse) continue;
+        if (!isDateWithinBounds(iss.issueDate || iss.postedAtUtc || iss.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) continue;
+
+        for (const item of iss.items) {
+          if (filterMaterial && item.materialId !== filterMaterial && item.materialCode !== filterMaterial) continue;
+          const key = `${iss.projectId}__${iss.warehouseId}__${item.materialId}`;
+          let entry = consumptionMap.get(key);
+          if (!entry) {
+            entry = {
+              id: key,
+              projectId: iss.projectId,
+              projectName: iss.projectName,
+              warehouseId: iss.warehouseId,
+              warehouseName: iss.warehouseName,
+              materialId: item.materialId,
+              materialCode: item.materialCode,
+              materialName: item.materialName,
+              unitCode: item.unitCode,
+              grossIssuedQuantity: 0,
+              grossIssuedValue: 0,
+              returnedReusableQuantity: 0,
+              returnedReusableValue: 0,
+              damagedOrScrapReturnQty: 0,
+              netConsumedQuantity: 0,
+              netConsumedValue: 0,
+              issueVoucherCount: 0,
+              returnVoucherCount: 0,
+            };
+            consumptionMap.set(key, entry);
+          }
+          const qty = item.actualIssuedQuantity ?? item.quantityToIssue ?? 0;
+          const val = item.totalIssuedAmount ?? round2(qty * (item.unitCost || 0));
+          entry.grossIssuedQuantity = round2(entry.grossIssuedQuantity + qty);
+          entry.grossIssuedValue = round2(entry.grossIssuedValue + val);
+          entry.issueVoucherCount += 1;
+        }
+      }
+
+      for (const ret of returns) {
+        if (ret.status !== 'Posted') continue;
+        if (!canUserReadStrictScope(user, ret.projectId, ret.warehouseId)) continue;
+        if (filterProject && ret.projectId !== filterProject) continue;
+        if (filterWarehouse && ret.warehouseId !== filterWarehouse) continue;
+        if (!isDateWithinBounds(ret.returnDate || ret.postedAtUtc || ret.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) continue;
+
+        for (const item of ret.items) {
+          if (filterMaterial && item.materialId !== filterMaterial && item.materialCode !== filterMaterial) continue;
+          const key = `${ret.projectId}__${ret.warehouseId}__${item.materialId}`;
+          let entry = consumptionMap.get(key);
+          if (!entry) {
+            entry = {
+              id: key,
+              projectId: ret.projectId,
+              projectName: ret.projectName,
+              warehouseId: ret.warehouseId,
+              warehouseName: ret.warehouseName,
+              materialId: item.materialId,
+              materialCode: item.materialCode,
+              materialName: item.materialName,
+              unitCode: item.unitCode,
+              grossIssuedQuantity: 0,
+              grossIssuedValue: 0,
+              returnedReusableQuantity: 0,
+              returnedReusableValue: 0,
+              damagedOrScrapReturnQty: 0,
+              netConsumedQuantity: 0,
+              netConsumedValue: 0,
+              issueVoucherCount: 0,
+              returnVoucherCount: 0,
+            };
+            consumptionMap.set(key, entry);
+          }
+          const isReusable = item.condition === 'ReusableGood' && item.disposition === 'ReturnToUsableStock';
+          const reusable = isReusable ? item.returnedQuantity || 0 : 0;
+          const val = isReusable
+            ? item.totalReturnAmount ?? round2(reusable * (item.unitCost || 0))
+            : 0;
+          const nonReusable =
+            item.condition === 'Damaged' || item.condition === 'UnusableScrap'
+              ? item.returnedQuantity || 0
+              : 0;
+          entry.returnedReusableQuantity = round2(entry.returnedReusableQuantity + reusable);
+          entry.returnedReusableValue = round2(entry.returnedReusableValue + val);
+          entry.damagedOrScrapReturnQty = round2(entry.damagedOrScrapReturnQty + nonReusable);
+          entry.returnVoucherCount += 1;
+        }
+      }
+
+      let rows = Array.from(consumptionMap.values()).map((r) => ({
+        ...r,
+        netConsumedQuantity: round2(Math.max(0, r.grossIssuedQuantity - r.returnedReusableQuantity)),
+        netConsumedValue: round2(Math.max(0, r.grossIssuedValue - r.returnedReusableValue)),
+      }));
+
+      if (searchTerm) {
+        rows = rows.filter((r) =>
+          `${r.projectName} ${r.warehouseName} ${r.materialCode} ${r.materialName}`
+            .toUpperCase()
+            .includes(searchTerm)
+        );
+      }
+
+      rows.sort((a, b) => b.netConsumedValue - a.netConsumedValue);
+
+      return {
+        status: 200,
+        report: {
+          reportType,
+          title: 'Material Issues, Returns & Net Project/Site Consumption',
+          subtitle: 'Net project material consumption reconciled from posted Material Issues less posted Reusable Site Returns.',
+          asOfTimestampUtc: nowUtc,
+          filtersApplied,
+          summary: {
+            totalRecords: rows.length,
+            totalGrossIssuedQuantity: round2(rows.reduce((s, r) => s + r.grossIssuedQuantity, 0)),
+            totalReturnedReusableQuantity: round2(rows.reduce((s, r) => s + r.returnedReusableQuantity, 0)),
+            totalDamagedOrScrapReturnQuantity: round2(rows.reduce((s, r) => s + r.damagedOrScrapReturnQty, 0)),
+            totalNetConsumedQuantity: round2(rows.reduce((s, r) => s + r.netConsumedQuantity, 0)),
+            totalGrossIssuedValue: round2(rows.reduce((s, r) => s + r.grossIssuedValue, 0)),
+            totalReturnedReusableValue: round2(rows.reduce((s, r) => s + r.returnedReusableValue, 0)),
+            totalNetConsumedValue: round2(rows.reduce((s, r) => s + r.netConsumedValue, 0)),
+            currency: 'USD',
+          },
+          columns: [
+            { key: 'projectName', header: 'Project Site' },
+            { key: 'warehouseName', header: 'Issuing Store' },
+            { key: 'materialCode', header: 'Material Code' },
+            { key: 'materialName', header: 'Material Name' },
+            { key: 'unitCode', header: 'UOM' },
+            { key: 'grossIssuedQuantity', header: 'Gross Issued Qty', align: 'right' },
+            { key: 'returnedReusableQuantity', header: 'Reusable Returned Qty', align: 'right' },
+            { key: 'damagedOrScrapReturnQty', header: 'Damaged/Scrap Qty', align: 'right' },
+            { key: 'netConsumedQuantity', header: 'Net Consumed Qty', align: 'right' },
+            { key: 'grossIssuedValue', header: 'Gross Issued ($)', align: 'right' },
+            { key: 'returnedReusableValue', header: 'Returned Credit ($)', align: 'right' },
+            { key: 'netConsumedValue', header: 'Net Consumption Cost ($)', align: 'right' },
+          ],
+          allRows: rows,
+        },
+      };
+    }
+
+    // 6. STOCK TRANSFERS, IN-TRANSIT STOCK & UNRESOLVED DISCREPANCIES
+    if (reportType === 'transfers-in-transit') {
+      const rows: Array<Record<string, any>> = [];
+
+      for (const trf of transfers) {
+        const canSource = canUserReadStrictScope(user, trf.sourceProjectId, trf.sourceWarehouseId);
+        const canDest = canUserReadStrictScope(user, trf.destinationProjectId, trf.destinationWarehouseId);
+        if (!canSource && !canDest) continue;
+        if (filterProject && trf.sourceProjectId !== filterProject && trf.destinationProjectId !== filterProject) continue;
+        if (filterWarehouse && trf.sourceWarehouseId !== filterWarehouse && trf.destinationWarehouseId !== filterWarehouse) continue;
+        if (filterStatus && trf.status !== filterStatus) continue;
+        if (!isDateWithinBounds(trf.requestDate || trf.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) continue;
+
+        for (const item of trf.items) {
+          if (filterMaterial && item.materialId !== filterMaterial && item.materialCode !== filterMaterial) continue;
+          const dispatched = item.dispatchedQuantity || 0;
+          const receivedGood = item.receivedGoodQuantity || 0;
+          const damaged = item.damagedQuantity || 0;
+          const short = item.shortQuantity || 0;
+          const disputed = item.disputedQuantity || 0;
+          const inTransitQty = ['Dispatched', 'PartiallyReceived'].includes(trf.status)
+            ? round2(Math.max(0, dispatched - (receivedGood + damaged + short + disputed)))
+            : 0;
+          const discrepancyQty = round2(damaged + short + disputed);
+
+          const row = {
+            id: `${trf.id}_${item.id}`,
+            transferId: trf.id,
+            transferNumber: trf.transferNumber,
+            requestDate: trf.requestDate || trf.createdAtUtc.slice(0, 10),
+            status: trf.status,
+            sourceLocation: `${trf.sourceWarehouseName} (${trf.sourceProjectName})`,
+            destinationLocation: `${trf.destinationWarehouseName} (${trf.destinationProjectName})`,
+            materialCode: item.materialCode,
+            materialName: item.materialName,
+            unitCode: item.unitCode,
+            requestedQuantity: item.requestedQuantity,
+            dispatchedQuantity: dispatched,
+            receivedGoodQuantity: receivedGood,
+            inTransitQuantity: inTransitQty,
+            discrepancyQuantity: discrepancyQty,
+            unitCost: item.unitCostAtDispatch || 0,
+            inTransitValue: round2(inTransitQty * (item.unitCostAtDispatch || 0)),
+            discrepancyStatus: trf.discrepancyStatus || 'None',
+          };
+
+          if (searchTerm) {
+            const hay = `${row.transferNumber} ${row.sourceLocation} ${row.destinationLocation} ${row.materialCode} ${row.materialName}`.toUpperCase();
+            if (!hay.includes(searchTerm)) continue;
+          }
+
+          rows.push(row);
+        }
+      }
+
+      return {
+        status: 200,
+        report: {
+          reportType,
+          title: 'Stock Transfers, In-Transit Inventory & Discrepancies Report',
+          subtitle: 'Inter-warehouse and cross-site transfer tracking, active in-transit exposure, and transit discrepancy reconciliation.',
+          asOfTimestampUtc: nowUtc,
+          filtersApplied,
+          summary: {
+            totalTransferLines: rows.length,
+            totalDispatchedQuantity: round2(rows.reduce((s, r) => s + r.dispatchedQuantity, 0)),
+            totalReceivedGoodQuantity: round2(rows.reduce((s, r) => s + r.receivedGoodQuantity, 0)),
+            totalInTransitQuantity: round2(rows.reduce((s, r) => s + r.inTransitQuantity, 0)),
+            totalInTransitValue: round2(rows.reduce((s, r) => s + r.inTransitValue, 0)),
+            totalDiscrepancyQuantity: round2(rows.reduce((s, r) => s + r.discrepancyQuantity, 0)),
+            openDiscrepancyLines: rows.filter((r) => r.discrepancyStatus === 'PendingReview' || r.discrepancyQuantity > 0).length,
+            currency: 'USD',
+          },
+          columns: [
+            { key: 'transferNumber', header: 'Transfer Number' },
+            { key: 'requestDate', header: 'Date' },
+            { key: 'status', header: 'Workflow Status' },
+            { key: 'sourceLocation', header: 'Source Location' },
+            { key: 'destinationLocation', header: 'Destination Location' },
+            { key: 'materialCode', header: 'Material Code' },
+            { key: 'materialName', header: 'Material Name' },
+            { key: 'unitCode', header: 'UOM' },
+            { key: 'dispatchedQuantity', header: 'Dispatched Qty', align: 'right' },
+            { key: 'receivedGoodQuantity', header: 'Received Good Qty', align: 'right' },
+            { key: 'inTransitQuantity', header: 'In-Transit Qty', align: 'right' },
+            { key: 'inTransitValue', header: 'In-Transit Value ($)', align: 'right' },
+            { key: 'discrepancyQuantity', header: 'Discrepancy Qty', align: 'right' },
+            { key: 'discrepancyStatus', header: 'Discrepancy Status' },
+          ],
+          allRows: rows,
+        },
+      };
+    }
+
+    // 7. REQUISITION STATUS & APPROVAL TURNAROUND
+    if (reportType === 'requisition-turnaround') {
+      const rows = requisitions
+        .filter((r) => {
+          if (!canUserReadStrictScope(user, r.projectId, undefined)) return false;
+          if (filterProject && r.projectId !== filterProject) return false;
+          if (filterStatus && r.status !== filterStatus) return false;
+          if (!isDateWithinBounds(r.createdAtUtc, dateBounds.fromDate, dateBounds.toDate)) return false;
+          if (searchTerm) {
+            const hay = `${r.requisitionNumber} ${r.projectName} ${r.requesterName} ${r.purpose}`.toUpperCase();
+            if (!hay.includes(searchTerm)) return false;
+          }
+          return true;
+        })
+        .map((r) => {
+          const submittedEntry = (r.approvalHistory || []).find((h) => h.action === 'Submitted');
+          const approvedEntry = (r.approvalHistory || []).find((h) => h.action === 'Approved');
+          const startIso = submittedEntry?.timestampUtc || r.createdAtUtc;
+          const endIso = r.approvedAtUtc || approvedEntry?.timestampUtc;
+
+          let turnaroundHours: number | null = null;
+          if (startIso && endIso) {
+            const diffMs = Math.max(0, new Date(endIso).getTime() - new Date(startIso).getTime());
+            turnaroundHours = round2(diffMs / (1000 * 60 * 60));
+          }
+
+          const totalRequestedQty = round2(
+            (r.items || []).reduce((s, it) => s + (it.requestedQuantity || 0), 0)
+          );
+
+          const linkedPostedIssues = issues.filter(
+            (i) =>
+              i.status === 'Posted' &&
+              (i.requisitionId === r.id || i.requisitionNumber === r.requisitionNumber)
+          );
+          const totalIssuedQty = round2(
+            linkedPostedIssues.reduce(
+              (s, i) =>
+                s +
+                (i.items || []).reduce(
+                  (lineSum, it) => lineSum + (it.actualIssuedQuantity ?? it.quantityToIssue ?? 0),
+                  0
+                ),
+              0
+            )
+          );
+
+          return {
+            id: r.id,
+            requisitionNumber: r.requisitionNumber,
+            createdDate: r.createdAtUtc.slice(0, 10),
+            requiredDate: r.requiredDate,
+            projectId: r.projectId,
+            projectName: r.projectName,
+            requesterName: r.requesterName,
+            priority: r.priority,
+            status: r.status,
+            lineCount: (r.items || []).length,
+            totalRequestedQuantity: totalRequestedQty,
+            totalIssuedQuantity: totalIssuedQty,
+            fulfillmentPercent:
+              totalRequestedQty > 0 ? round2(Math.min(100, (totalIssuedQty / totalRequestedQty) * 100)) : 0,
+            approvedByName: r.approvedByName || 'Pending',
+            turnaroundHours: turnaroundHours !== null ? turnaroundHours : 'N/A',
+            numericTurnaroundHours: turnaroundHours,
+          };
+        });
+
+      const approvedTurnarounds = rows
+        .map((r) => r.numericTurnaroundHours)
+        .filter((v): v is number => typeof v === 'number');
+      const avgTurnaroundHours =
+        approvedTurnarounds.length > 0
+          ? round2(approvedTurnarounds.reduce((s, v) => s + v, 0) / approvedTurnarounds.length)
+          : 0;
+
+      return {
+        status: 200,
+        report: {
+          reportType,
+          title: 'Requisition Status, Fulfillment & Approval Turnaround',
+          subtitle: 'Cycle-time analysis from requisition submission to approval and downstream store issue fulfillment.',
+          asOfTimestampUtc: nowUtc,
+          filtersApplied,
+          summary: {
+            totalRequisitions: rows.length,
+            submittedPendingCount: rows.filter((r) => r.status === 'Submitted').length,
+            approvedCount: rows.filter((r) => r.status === 'Approved').length,
+            rejectedCount: rows.filter((r) => r.status === 'Rejected').length,
+            averageApprovalTurnaroundHours: avgTurnaroundHours,
+            totalRequestedQuantity: round2(rows.reduce((s, r) => s + r.totalRequestedQuantity, 0)),
+            totalIssuedQuantity: round2(rows.reduce((s, r) => s + r.totalIssuedQuantity, 0)),
+          },
+          columns: [
+            { key: 'requisitionNumber', header: 'Requisition No' },
+            { key: 'createdDate', header: 'Created Date' },
+            { key: 'requiredDate', header: 'Required Date' },
+            { key: 'projectName', header: 'Project Site' },
+            { key: 'requesterName', header: 'Requester' },
+            { key: 'priority', header: 'Priority' },
+            { key: 'status', header: 'Status' },
+            { key: 'totalRequestedQuantity', header: 'Requested Qty', align: 'right' },
+            { key: 'totalIssuedQuantity', header: 'Issued Qty', align: 'right' },
+            { key: 'fulfillmentPercent', header: 'Fulfilled (%)', align: 'right' },
+            { key: 'approvedByName', header: 'Approver' },
+            { key: 'turnaroundHours', header: 'Approval Turnaround (Hrs)', align: 'right' },
+          ],
+          allRows: rows,
+        },
+      };
+    }
+
+    // 8. LOW-STOCK / REORDER REPORT
+    if (reportType === 'low-stock-reorder') {
+      const rows = balances
+        .filter((b) => {
+          if (!canUserReadStrictScope(user, b.projectId, b.warehouseId)) return false;
+          if (filterProject && b.projectId !== filterProject) return false;
+          if (filterWarehouse && b.warehouseId !== filterWarehouse) return false;
+          if (filterMaterial && b.materialId !== filterMaterial && b.materialCode !== filterMaterial) return false;
+          if (searchTerm) {
+            const hay = `${b.materialCode} ${b.materialName} ${b.warehouseName} ${b.projectName}`.toUpperCase();
+            if (!hay.includes(searchTerm)) return false;
+          }
+          return true;
+        })
+        .map((b) => {
+          const mat = materials.find((m) => m.id === b.materialId || m.itemCode === b.materialCode);
+          if (!mat || !mat.isActive || !(mat.reorderLevel > 0)) return null;
+          if (b.quantityOnHand > mat.reorderLevel) return null;
+
+          const shortfall = round2(Math.max(0, mat.reorderLevel - b.quantityOnHand));
+          const severity =
+            b.quantityOnHand <= 0
+              ? 'OutOfStock'
+              : b.quantityOnHand <= mat.minimumStockLevel
+              ? 'Critical'
+              : 'Reorder';
+
+          if (filterStatus && severity !== filterStatus) return null;
+
+          return {
+            id: b.id,
+            materialId: b.materialId,
+            materialCode: b.materialCode,
+            materialName: b.materialName,
+            categoryName: mat.categoryName,
+            unitCode: b.unitCode,
+            warehouseId: b.warehouseId,
+            warehouseName: b.warehouseName,
+            projectId: b.projectId,
+            projectName: b.projectName,
+            quantityOnHand: b.quantityOnHand,
+            quantityAvailable:
+              b.quantityAvailable !== undefined
+                ? b.quantityAvailable
+                : round2(Math.max(0, b.quantityOnHand - (b.quantityReserved || 0))),
+            quantityInTransit: b.quantityInTransit || 0,
+            minimumStockLevel: mat.minimumStockLevel,
+            reorderLevel: mat.reorderLevel,
+            shortfallQuantity: shortfall,
+            weightedAverageCost: b.weightedAverageCost || 0,
+            estimatedReplenishmentCost: round2(shortfall * (b.weightedAverageCost || 0)),
+            severity,
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null)
+        .sort((a, b) => b.shortfallQuantity - a.shortfallQuantity);
+
+      return {
+        status: 200,
+        report: {
+          reportType,
+          title: 'Low-Stock & Reorder Threshold Report',
+          subtitle: 'Materials at or below configured reorder and minimum safety stock thresholds by location.',
+          asOfTimestampUtc: nowUtc,
+          filtersApplied,
+          summary: {
+            totalLowStockItems: rows.length,
+            criticalOrOutOfStockCount: rows.filter((r) => r.severity === 'OutOfStock' || r.severity === 'Critical').length,
+            totalShortfallQuantity: round2(rows.reduce((s, r) => s + r.shortfallQuantity, 0)),
+            totalEstimatedReplenishmentCost: round2(rows.reduce((s, r) => s + r.estimatedReplenishmentCost, 0)),
+            currency: 'USD',
+          },
+          columns: [
+            { key: 'materialCode', header: 'Material Code' },
+            { key: 'materialName', header: 'Material Name' },
+            { key: 'categoryName', header: 'Category' },
+            { key: 'warehouseName', header: 'Warehouse / Store' },
+            { key: 'projectName', header: 'Project Site' },
+            { key: 'unitCode', header: 'UOM' },
+            { key: 'quantityOnHand', header: 'Usable On Hand', align: 'right' },
+            { key: 'quantityInTransit', header: 'In-Transit Qty', align: 'right' },
+            { key: 'minimumStockLevel', header: 'Min Safety Level', align: 'right' },
+            { key: 'reorderLevel', header: 'Reorder Threshold', align: 'right' },
+            { key: 'shortfallQuantity', header: 'Reorder Shortfall', align: 'right' },
+            { key: 'estimatedReplenishmentCost', header: 'Est. Replenishment ($)', align: 'right' },
+            { key: 'severity', header: 'Alert Severity' },
+          ],
+          allRows: rows,
+        },
+      };
+    }
+
+    return {
+      status: 400,
+      message: `Unsupported report type '${reportType}'. Valid types: stock-balances, inventory-valuation, stock-ledger, grn-po-summary, consumption-issues-returns, transfers-in-transit, requisition-turnaround, low-stock-reorder.`,
+    };
+  }
+
+  // GET /api/reports/:reportType/export (Authorized RFC 4180 CSV Export)
+  router.get('/reports/:reportType/export', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user!;
+    const { reportType } = req.params;
+    const { format = 'csv', maxRows = '5000' } = req.query;
+
+    if (String(format).toLowerCase() !== 'csv') {
+      return res.status(400).json({
+        success: false,
+        message: `Unsupported export format '${format}'. Server export supports 'csv'. For PDF, use the browser Print-to-PDF layout.`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    const result = buildScopedReportData(reportType, user, req.query as Record<string, any>);
+    if (result.status !== 200 || !result.report) {
+      return res.status(result.status).json({
+        success: false,
+        message: result.message || 'Failed to generate report export',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    const rowLimit = Math.min(10000, Math.max(1, parseInt(String(maxRows), 10) || 5000));
+    const boundedRows = result.report.allRows.slice(0, rowLimit);
+    const csvContent = buildCsvDocument(result.report.columns, boundedRows);
+    const fileDate = result.report.asOfTimestampUtc.slice(0, 10);
+    const filename = `${reportType}-${fileDate}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Report-Total-Count', String(result.report.allRows.length));
+    res.setHeader('X-Report-Exported-Count', String(boundedRows.length));
+    res.setHeader('X-Report-Generated-At', result.report.asOfTimestampUtc);
+    return res.status(200).send(csvContent);
+  });
+
+  // GET /api/reports/:reportType (Paginated JSON Report with Totals & Metadata)
+  router.get('/reports/:reportType', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user!;
+    const { reportType } = req.params;
+    const { page = '1', pageSize = '25' } = req.query;
+
+    const result = buildScopedReportData(reportType, user, req.query as Record<string, any>);
+    if (result.status !== 200 || !result.report) {
+      return res.status(result.status).json({
+        success: false,
+        message: result.message || 'Failed to generate report',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    const pageIndex = Math.max(1, parseInt(String(page), 10) || 1);
+    const size = Math.min(500, Math.max(1, parseInt(String(pageSize), 10) || 25));
+    const totalCount = result.report.allRows.length;
+    const totalPages = Math.ceil(totalCount / size);
+    const pagedItems = result.report.allRows.slice((pageIndex - 1) * size, pageIndex * size);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        reportType: result.report.reportType,
+        title: result.report.title,
+        subtitle: result.report.subtitle,
+        asOfTimestampUtc: result.report.asOfTimestampUtc,
+        filtersApplied: result.report.filtersApplied,
+        summary: result.report.summary,
+        columns: result.report.columns,
+        items: pagedItems,
+        pageIndex,
+        pageSize: size,
+        totalCount,
+        totalPages,
+      },
+      timestampUtc: result.report.asOfTimestampUtc,
     });
   });
 
