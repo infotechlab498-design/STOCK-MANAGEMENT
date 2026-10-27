@@ -382,6 +382,7 @@ function requireRole(allowedRoles: string[]) {
 function setupApiRoutes(router: express.Router) {
   router.use((_req, _res, next) => {
     ensureStorageInitialized();
+    ensureReconciled();
     next();
   });
 
@@ -862,6 +863,11 @@ function setupApiRoutes(router: express.Router) {
 
   // Atomic file writer
   function writeJsonAtomic(filePath: string, data: any) {
+    ensureStorageInitialized();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
     const tempFile = `${filePath}.${crypto.randomBytes(6).toString('hex')}.tmp`;
     fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
     fs.renameSync(tempFile, filePath);
@@ -869,6 +875,7 @@ function setupApiRoutes(router: express.Router) {
 
   // Safe JSON reader with corruption guard
   function readJsonSafe<T>(filePath: string, initialDefault: T): T {
+    ensureStorageInitialized();
     if (!fs.existsSync(filePath)) {
       writeJsonAtomic(filePath, initialDefault);
       return initialDefault;
@@ -997,12 +1004,6 @@ function setupApiRoutes(router: express.Router) {
       createdAtUtc: '2026-02-15T10:00:00Z',
     },
   ];
-
-  // Initialize storage files if missing
-  readJsonSafe(categoriesFile, defaultCategories);
-  readJsonSafe(unitsFile, defaultUnits);
-  readJsonSafe(conversionsFile, defaultConversions);
-  readJsonSafe(materialsFile, defaultMaterials);
 
   // --- API: Material Categories ---
   router.get('/material-categories', authMiddleware, (_req: AuthenticatedRequest, res: Response) => {
@@ -2793,17 +2794,6 @@ function setupApiRoutes(router: express.Router) {
       createdByUserId: 'USR-ADMIN-01',
     },
   ];
-
-  // Initialize storage files if missing
-  readJsonSafe(suppliersFile, defaultSuppliers);
-  readJsonSafe(purchaseOrdersFile, []);
-  readJsonSafe(quotationsFile, []);
-  readJsonSafe(grnsFile, []);
-  readJsonSafe(receiptLedgerFile, []);
-  readJsonSafe(stockLedgerFile, []);
-  readJsonSafe(inventoryBalancesFile, []);
-  readJsonSafe(materialIssuesFile, []);
-  readJsonSafe(materialReturnsFile, []);
 
   // Helper: Number formatting and precision
   function round2(num: number): number {
@@ -8984,59 +8974,64 @@ function setupApiRoutes(router: express.Router) {
     });
   });
 
-  // Startup Reconciliation: Automatically reconcile any legacy or pending posted receipts
-  try {
-    const startupReceipts = readJsonSafe<ReceiptLedgerRecord[]>(receiptLedgerFile, []);
-    const unreconciled = startupReceipts.filter((r) => !r.reconciledWithInventoryLedger);
-    if (unreconciled.length > 0) {
-      const startupGrns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
-      const startupPos = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
-      const startupLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
-      const startupBalances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
-      const startupMaterials = readJsonSafe<MaterialRecord[]>(materialsFile, []);
-      const startupProjects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
+  let isReconciled = false;
+  function ensureReconciled() {
+    if (isReconciled) return;
+    isReconciled = true;
+    // Startup Reconciliation: Automatically reconcile any legacy or pending posted receipts
+    try {
+      const startupReceipts = readJsonSafe<ReceiptLedgerRecord[]>(receiptLedgerFile, []);
+      const unreconciled = startupReceipts.filter((r) => !r.reconciledWithInventoryLedger);
+      if (unreconciled.length > 0) {
+        const startupGrns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+        const startupPos = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+        const startupLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+        const startupBalances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+        const startupMaterials = readJsonSafe<MaterialRecord[]>(materialsFile, []);
+        const startupProjects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
 
-      let reconciledAny = false;
-      for (const rcpt of unreconciled) {
-        const grn = startupGrns.find((g) => g.id === rcpt.grnId && g.status === 'Posted');
-        const po = startupPos.find((p) => p.id === rcpt.purchaseOrderId);
-        if (grn && po) {
-          const systemUser: JwtPayload = {
-            sub: rcpt.postedByUserId || 'USR-ADMIN-01',
-            username: 'system',
-            email: 'system@constructcorp.com',
-            fullName: rcpt.postedByName || 'System Auto-Reconciliation',
-            roles: ['SuperAdmin', 'InventoryManager'],
-            projectScopes: ['*'],
-            warehouseScopes: ['*'],
-            iat: Math.floor(Date.now() / 1000),
-            exp: Math.floor(Date.now() / 1000) + 3600,
-            iss: JWT_ISSUER,
-            aud: JWT_AUDIENCE,
-          };
-          postGrnToInventoryLedger(
-            grn,
-            po,
-            systemUser,
-            rcpt.postedAtUtc || new Date().toISOString(),
-            startupLedger,
-            startupBalances,
-            startupMaterials,
-            startupProjects
-          );
-          rcpt.reconciledWithInventoryLedger = true;
-          reconciledAny = true;
+        let reconciledAny = false;
+        for (const rcpt of unreconciled) {
+          const grn = startupGrns.find((g) => g.id === rcpt.grnId && g.status === 'Posted');
+          const po = startupPos.find((p) => p.id === rcpt.purchaseOrderId);
+          if (grn && po) {
+            const systemUser: JwtPayload = {
+              sub: rcpt.postedByUserId || 'USR-ADMIN-01',
+              username: 'system',
+              email: 'system@constructcorp.com',
+              fullName: rcpt.postedByName || 'System Auto-Reconciliation',
+              roles: ['SuperAdmin', 'InventoryManager'],
+              projectScopes: ['*'],
+              warehouseScopes: ['*'],
+              iat: Math.floor(Date.now() / 1000),
+              exp: Math.floor(Date.now() / 1000) + 3600,
+              iss: JWT_ISSUER,
+              aud: JWT_AUDIENCE,
+            };
+            postGrnToInventoryLedger(
+              grn,
+              po,
+              systemUser,
+              rcpt.postedAtUtc || new Date().toISOString(),
+              startupLedger,
+              startupBalances,
+              startupMaterials,
+              startupProjects
+            );
+            rcpt.reconciledWithInventoryLedger = true;
+            reconciledAny = true;
+          }
+        }
+        if (reconciledAny) {
+          writeJsonAtomic(receiptLedgerFile, startupReceipts);
+          writeJsonAtomic(stockLedgerFile, startupLedger);
+          writeJsonAtomic(inventoryBalancesFile, startupBalances);
+          console.log(`[ConstructionStock] Reconciled ${unreconciled.length} pending stock receipts into authoritative ledger.`);
         }
       }
-      if (reconciledAny) {
-        writeJsonAtomic(receiptLedgerFile, startupReceipts);
-        writeJsonAtomic(stockLedgerFile, startupLedger);
-        writeJsonAtomic(inventoryBalancesFile, startupBalances);
-        console.log(`[ConstructionStock] Reconciled ${unreconciled.length} pending stock receipts into authoritative ledger.`);
-      }
+    } catch (err) {
+      console.error('[ConstructionStock] Startup reconciliation error:', err);
     }
-  } catch (err) {
-    console.error('[ConstructionStock] Startup reconciliation error:', err);
   }
 }
 
