@@ -18,19 +18,26 @@ const DATA_DIR = process.env.VERCEL
   ? path.resolve('/tmp', 'data')
   : path.resolve(__dirname, 'data');
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+let isStorageInitialized = false;
 
-if (process.env.VERCEL) {
+function ensureStorageInitialized() {
+  if (isStorageInitialized) return;
+  isStorageInitialized = true;
+
   try {
-    const srcDataDir = path.resolve(__dirname, 'data');
-    if (fs.existsSync(srcDataDir)) {
-      const files = fs.readdirSync(srcDataDir);
-      for (const file of files) {
-        const destPath = path.join(DATA_DIR, file);
-        if (!fs.existsSync(destPath)) {
-          fs.copyFileSync(path.join(srcDataDir, file), destPath);
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+
+    if (process.env.VERCEL) {
+      const srcDataDir = path.resolve(__dirname, 'data');
+      if (fs.existsSync(srcDataDir)) {
+        const files = fs.readdirSync(srcDataDir);
+        for (const file of files) {
+          const destPath = path.join(DATA_DIR, file);
+          if (!fs.existsSync(destPath)) {
+            fs.copyFileSync(path.join(srcDataDir, file), destPath);
+          }
         }
       }
     }
@@ -373,6 +380,11 @@ function requireRole(allowedRoles: string[]) {
 // Setup API Routes
 // --------------------------------------------------------------------------
 function setupApiRoutes(router: express.Router) {
+  router.use((_req, _res, next) => {
+    ensureStorageInitialized();
+    next();
+  });
+
   // POST /api/auth/login
   router.post('/auth/login', (req: Request, res: Response) => {
     const { usernameOrEmail, password } = req.body || {};
