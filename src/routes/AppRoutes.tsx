@@ -35,33 +35,12 @@ import { ModulePlaceholderPage } from '../pages/ModulePlaceholderPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { LoadingSpinner } from '../components/common/EmptyState';
 
-// Protected Route Guard
+// Protected Route Guard (Login Bypassed)
 export const ProtectedRoute: React.FC<{
   children: React.ReactNode;
   allowedRoles?: string[];
 }> = ({ children, allowedRoles }) => {
-  const { user, token, isLoading, hasRole } = useAuth();
-  const location = useLocation();
-
-  if (isLoading) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: 'var(--color-bg-page)',
-        }}
-      >
-        <LoadingSpinner label="Authenticating session security credentials..." />
-      </div>
-    );
-  }
-
-  if (!token || !user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
+  const { hasRole } = useAuth();
 
   if (allowedRoles && !hasRole(allowedRoles)) {
     return <Navigate to="/dashboard" replace />;
@@ -71,20 +50,12 @@ export const ProtectedRoute: React.FC<{
 };
 
 export const AppRoutes: React.FC = () => {
-  const { user, token, isLoading } = useAuth();
-
   return (
     <Routes>
-      {/* Public Login Route */}
+      {/* Public Login Route - Bypassed directly to Dashboard */}
       <Route
         path="/login"
-        element={
-          !isLoading && token && user ? (
-            <Navigate to="/dashboard" replace />
-          ) : (
-            <LoginPage />
-          )
-        }
+        element={<Navigate to="/dashboard" replace />}
       />
 
       {/* Root redirect */}

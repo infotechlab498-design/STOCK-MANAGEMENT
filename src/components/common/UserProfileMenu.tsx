@@ -4,7 +4,7 @@ import { useAuth } from '../../app/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 export const UserProfileMenu: React.FC = () => {
-  const { user, logout, hasRole } = useAuth();
+  const { user, switchRoleProfile, hasRole } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -47,11 +47,6 @@ export const UserProfileMenu: React.FC = () => {
   const handleNavigate = (path: string) => {
     setIsOpen(false);
     navigate(path);
-  };
-
-  const handleLogout = async () => {
-    setIsOpen(false);
-    await logout();
   };
 
   return (
@@ -171,17 +166,48 @@ export const UserProfileMenu: React.FC = () => {
 
             <div className="dropdown-divider" />
 
-            <button
-              type="button"
-              className="dropdown-item danger"
-              onClick={handleLogout}
+            <div
+              style={{
+                padding: 'var(--space-1-5) var(--space-4)',
+                fontSize: '0.625rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--color-text-subtle)',
+              }}
             >
-              <LogOut size={16} />
-              <span>Log Out</span>
-            </button>
+              Switch Active Role (Bypass Mode)
+            </div>
+            {[
+              { label: 'Super Admin', email: 'admin@constructcorp.com' },
+              { label: 'Inventory Manager', email: 'inv.manager@constructcorp.com' },
+              { label: 'Project Manager', email: 'pm.metro@constructcorp.com' },
+              { label: 'Storekeeper', email: 'store.north@constructcorp.com' },
+              { label: 'Procurement Officer', email: 'procurement@constructcorp.com' },
+              { label: 'Accounts Officer', email: 'accounts@constructcorp.com' },
+            ].map((roleOpt) => (
+              <button
+                key={roleOpt.email}
+                type="button"
+                className="dropdown-item"
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '0.35rem var(--space-4)',
+                  fontWeight: user.email === roleOpt.email ? 700 : 400,
+                  color: user.email === roleOpt.email ? 'var(--color-orange-600)' : undefined,
+                }}
+                onClick={() => {
+                  switchRoleProfile(roleOpt.email);
+                  setIsOpen(false);
+                }}
+              >
+                <span>{roleOpt.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}
     </div>
   );
 };
+
