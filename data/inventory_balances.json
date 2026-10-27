@@ -1,6 +1,6 @@
 [
   {
-    "id": "BAL-MVR12HV1-7325d6",
+    "id": "BAL-MVR2162J-2bf67c",
     "materialId": "MAT-CEM-02",
     "materialCode": "CEM-OPC-50KG",
     "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
@@ -18,10 +18,10 @@
     "weightedAverageCost": 14.7,
     "inventoryValue": 1470,
     "version": 3,
-    "lastUpdatedUtc": "2026-10-27T18:37:25.517Z"
+    "lastUpdatedUtc": "2026-10-27T19:04:23.167Z"
   },
   {
-    "id": "BAL-MVR12I21-c42dca",
+    "id": "BAL-MVR2168K-4d04a5",
     "materialId": "MAT-CEM-02",
     "materialCode": "CEM-OPC-50KG",
     "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
@@ -39,10 +39,10 @@
     "weightedAverageCost": 15,
     "inventoryValue": 750,
     "version": 1,
-    "lastUpdatedUtc": "2026-10-27T18:37:25.609Z"
+    "lastUpdatedUtc": "2026-10-27T19:04:23.252Z"
   },
   {
-    "id": "BAL-MVR12IH8-24708b",
+    "id": "BAL-MVR216NC-7826f5",
     "materialId": "MAT-AGG-03",
     "materialCode": "AGG-CRUSH-20MM",
     "materialName": "Crushed Coarse Aggregate 20mm",
@@ -60,10 +60,10 @@
     "weightedAverageCost": 15,
     "inventoryValue": 1125,
     "version": 2,
-    "lastUpdatedUtc": "2026-10-27T18:37:26.200Z"
+    "lastUpdatedUtc": "2026-10-27T19:04:23.808Z"
   },
   {
-    "id": "BAL-DST-mvr12iih-c714",
+    "id": "BAL-DST-mvr216o0-eede",
     "materialId": "MAT-AGG-03",
     "materialCode": "AGG-CRUSH-20MM",
     "materialName": "Crushed Coarse Aggregate 20mm",
@@ -79,6 +79,6 @@
     "weightedAverageCost": 15,
     "inventoryValue": 300,
     "version": 2,
-    "lastUpdatedUtc": "2026-10-27T18:37:26.210Z"
+    "lastUpdatedUtc": "2026-10-27T19:04:23.812Z"
   }
 ]

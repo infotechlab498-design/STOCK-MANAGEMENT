@@ -4022,70 +4022,6 @@
     "approvedAtUtc": "2026-10-27T18:36:17.552Z"
   },
   {
-    "id": "REQ-TEST-P10",
-    "requisitionNumber": "REQ-2026-9999",
-    "projectId": "PRJ-101",
-    "projectName": "Metro Rail Viaduct Sector 4",
-    "purpose": "Pier Cap Structural Concrete Pour",
-    "workActivity": "Concrete Pier Construction",
-    "status": "PartiallyFulfilled",
-    "requiredDate": "2026-11-15",
-    "items": [
-      {
-        "id": "REQ-ITEM-P10-1",
-        "requisitionId": "REQ-TEST-P10",
-        "materialId": "MAT-001",
-        "materialCode": "CONC-40",
-        "materialName": "Ready-Mix Concrete Grade 40",
-        "unitCode": "CuM",
-        "requestedQuantity": 50,
-        "issuedQuantity": 30,
-        "returnedQuantity": 0,
-        "outstandingQuantity": 20,
-        "estimatedUnitCost": 120,
-        "totalEstimatedCost": 6000
-      }
-    ],
-    "auditTrail": [
-      {
-        "id": "AUD-REQ-1",
-        "actorUserId": "USR-PM-03",
-        "actorName": "David Sterling",
-        "actorRole": "ProjectManager",
-        "action": "Approved",
-        "timestampUtc": "2026-10-27T18:37:23.941Z"
-      }
-    ],
-    "createdByUserId": "USR-PM-03",
-    "createdByName": "David Sterling",
-    "createdAtUtc": "2026-10-27T18:37:23.941Z",
-    "updatedAtUtc": "2026-10-27T18:37:23.976Z"
-  },
-  {
-    "id": "REQ-TEST-DRAFT",
-    "requisitionNumber": "REQ-2026-8888",
-    "projectId": "PRJ-101",
-    "projectName": "Metro Rail Viaduct Sector 4",
-    "purpose": "Unapproved Work",
-    "status": "Draft",
-    "items": [
-      {
-        "id": "REQ-ITEM-DRAFT-1",
-        "requisitionId": "REQ-TEST-DRAFT",
-        "materialId": "MAT-001",
-        "materialCode": "CONC-40",
-        "materialName": "Ready-Mix Concrete Grade 40",
-        "unitCode": "CuM",
-        "requestedQuantity": 20,
-        "issuedQuantity": 0
-      }
-    ],
-    "auditTrail": [],
-    "createdByUserId": "USR-PM-03",
-    "createdByName": "David Sterling",
-    "createdAtUtc": "2026-10-27T18:37:23.941Z"
-  },
-  {
     "id": "REQ-mvr12hgb-39ed41",
     "requisitionNumber": "MR-2026-0048",
     "projectId": "PRJ-101",
@@ -4260,5 +4196,245 @@
     "approvedByUserId": "USR-ADMIN-01",
     "approvedByName": "Alexander Vance",
     "approvedAtUtc": "2026-10-27T18:37:26.654Z"
+  },
+  {
+    "id": "REQ-TEST-P10",
+    "requisitionNumber": "REQ-2026-9999",
+    "projectId": "PRJ-101",
+    "projectName": "Metro Rail Viaduct Sector 4",
+    "purpose": "Pier Cap Structural Concrete Pour",
+    "workActivity": "Concrete Pier Construction",
+    "status": "PartiallyFulfilled",
+    "requiredDate": "2026-11-15",
+    "items": [
+      {
+        "id": "REQ-ITEM-P10-1",
+        "requisitionId": "REQ-TEST-P10",
+        "materialId": "MAT-001",
+        "materialCode": "CONC-40",
+        "materialName": "Ready-Mix Concrete Grade 40",
+        "unitCode": "CuM",
+        "requestedQuantity": 50,
+        "issuedQuantity": 30,
+        "returnedQuantity": 0,
+        "outstandingQuantity": 20,
+        "estimatedUnitCost": 120,
+        "totalEstimatedCost": 6000
+      }
+    ],
+    "auditTrail": [
+      {
+        "id": "AUD-REQ-1",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "timestampUtc": "2026-10-27T19:04:21.813Z"
+      }
+    ],
+    "createdByUserId": "USR-PM-03",
+    "createdByName": "David Sterling",
+    "createdAtUtc": "2026-10-27T19:04:21.813Z",
+    "updatedAtUtc": "2026-10-27T19:04:21.836Z"
+  },
+  {
+    "id": "REQ-TEST-DRAFT",
+    "requisitionNumber": "REQ-2026-8888",
+    "projectId": "PRJ-101",
+    "projectName": "Metro Rail Viaduct Sector 4",
+    "purpose": "Unapproved Work",
+    "status": "Draft",
+    "items": [
+      {
+        "id": "REQ-ITEM-DRAFT-1",
+        "requisitionId": "REQ-TEST-DRAFT",
+        "materialId": "MAT-001",
+        "materialCode": "CONC-40",
+        "materialName": "Ready-Mix Concrete Grade 40",
+        "unitCode": "CuM",
+        "requestedQuantity": 20,
+        "issuedQuantity": 0
+      }
+    ],
+    "auditTrail": [],
+    "createdByUserId": "USR-PM-03",
+    "createdByName": "David Sterling",
+    "createdAtUtc": "2026-10-27T19:04:21.813Z"
+  },
+  {
+    "id": "REQ-mvr215pk-8ce7a3",
+    "requisitionNumber": "MR-2026-0050",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-25",
+    "priority": "High",
+    "purpose": "Guideway pier cap reinforcement steel cage fabrication.",
+    "workActivity": "Pier Cap Structural Pour",
+    "siteLocationDetail": "Pier 22-26, North Staging Yard",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-68996140",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 8,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "Adjusted to weekly phase limit per PM instruction",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-4a5ea139",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 100,
+        "unitId": "UNT-BAG",
+        "unitCode": "Bag (50kg standard)",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-2a32051b",
+        "requisitionId": "REQ-mvr215pk-8ce7a3",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T19:04:22.568Z"
+      },
+      {
+        "id": "HIS-083e3bfd",
+        "requisitionId": "REQ-mvr215pk-8ce7a3",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for PM review before fabrication.",
+        "timestampUtc": "2026-10-27T19:04:22.578Z"
+      },
+      {
+        "id": "HIS-b036b3a9",
+        "requisitionId": "REQ-mvr215pk-8ce7a3",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Reduce rebar quantity from 12.5 MT to 8.0 MT to align with weekly pouring cycle.",
+        "timestampUtc": "2026-10-27T19:04:22.594Z"
+      },
+      {
+        "id": "HIS-9e6db058",
+        "requisitionId": "REQ-mvr215pk-8ce7a3",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Updated",
+        "comments": "Adjusted rebar quantity to 8.0 MT.",
+        "timestampUtc": "2026-10-27T19:04:22.599Z"
+      },
+      {
+        "id": "HIS-115c417e",
+        "requisitionId": "REQ-mvr215pk-8ce7a3",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Resubmitting with reduced rebar quantity.",
+        "timestampUtc": "2026-10-27T19:04:22.604Z"
+      },
+      {
+        "id": "HIS-8ceb9939",
+        "requisitionId": "REQ-mvr215pk-8ce7a3",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Adjusted quantities verified against site schedule.",
+        "timestampUtc": "2026-10-27T19:04:22.610Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T19:04:22.568Z",
+    "updatedAtUtc": "2026-10-27T19:04:22.610Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T19:04:22.610Z"
+  },
+  {
+    "id": "REQ-mvr216za-22b3fc",
+    "requisitionNumber": "MR-2026-0051",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-fb2a6a1d",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-7193bf63",
+        "requisitionId": "REQ-mvr216za-22b3fc",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T19:04:24.214Z"
+      },
+      {
+        "id": "HIS-6cf6f7bd",
+        "requisitionId": "REQ-mvr216za-22b3fc",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T19:04:24.220Z"
+      },
+      {
+        "id": "HIS-ccd9d51e",
+        "requisitionId": "REQ-mvr216za-22b3fc",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T19:04:24.244Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T19:04:24.214Z",
+    "updatedAtUtc": "2026-10-27T19:04:24.244Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T19:04:24.244Z"
   }
 ]

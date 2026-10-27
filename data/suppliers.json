@@ -453,5 +453,23 @@
     "createdByUserId": "USR-PROC-05",
     "updatedAtUtc": "2026-10-27T18:37:26.830Z",
     "updatedByUserId": "USR-ADMIN-01"
+  },
+  {
+    "id": "SUP-MVR216Y2",
+    "supplierCode": "SUP-TEST-4168",
+    "normalizedSupplierCode": "SUP-TEST-4168",
+    "name": "Titan Heavy Industries International",
+    "contactPerson": "Marcus Vance",
+    "phone": "+1-555-019-8833",
+    "email": "m.vance@titanheavy.example.com",
+    "address": "742 Foundry Blvd, Industrial Quarter",
+    "taxReference": "TAX-TITAN-88219",
+    "paymentTerms": "Net 60 Days",
+    "notes": "Direct manufacturer of structural rebar and structural beams.",
+    "isActive": true,
+    "createdAtUtc": "2026-10-27T19:04:24.170Z",
+    "createdByUserId": "USR-PROC-05",
+    "updatedAtUtc": "2026-10-27T19:04:24.382Z",
+    "updatedByUserId": "USR-ADMIN-01"
   }
 ]

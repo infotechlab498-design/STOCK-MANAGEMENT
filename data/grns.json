@@ -1,9 +1,9 @@
 [
   {
-    "id": "GRN-MVR12IGH-c93c5a",
+    "id": "GRN-MVR216MD-aae7d4",
     "grnNumber": "GRN-2026-0006",
-    "purchaseOrderId": "PO-MVR12IEY-6e4806",
-    "purchaseOrderNumber": "PO-2026-0160",
+    "purchaseOrderId": "PO-MVR216L4-39bfa7",
+    "purchaseOrderNumber": "PO-2026-0170",
     "supplierId": "SUP-HORIZON-02",
     "supplierCode": "SUP-HORIZON",
     "supplierName": "Horizon Ready-Mix & Aggregates Corp.",
@@ -13,7 +13,7 @@
     "warehouseName": "Metro Central Staging Yard",
     "storageLocation": "Metro Central Yard",
     "grnDate": "2026-10-27",
-    "receivedAtUtc": "2026-10-27T18:37:26.129Z",
+    "receivedAtUtc": "2026-10-27T19:04:23.749Z",
     "deliveryChallanNumber": "DC-SEED-TRANSFER-01",
     "deliveryChallanDate": "2026-10-27",
     "vehicleNumber": "N/A",
@@ -33,8 +33,8 @@
     },
     "items": [
       {
-        "id": "GRI-b7aaef19",
-        "purchaseOrderItemId": "POI-mvr12iey-a4bb90",
+        "id": "GRI-0164264d",
+        "purchaseOrderItemId": "POI-mvr216l4-738d43",
         "materialId": "MAT-AGG-03",
         "materialCode": "AGG-CRUSH-20MM",
         "materialName": "Crushed Coarse Aggregate 20mm",
@@ -62,75 +62,75 @@
     "totalAcceptedValue": 1500,
     "auditTrail": [
       {
-        "id": "GA-ccaf3e99",
-        "grnId": "GRN-MVR12IGH-c93c5a",
+        "id": "GA-417a6fbe",
+        "grnId": "GRN-MVR216MD-aae7d4",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "DraftCreated",
-        "comments": "Goods Received Note draft created against PO-2026-0160. Delivery Challan: DC-SEED-TRANSFER-01.",
-        "timestampUtc": "2026-10-27T18:37:26.129Z"
+        "comments": "Goods Received Note draft created against PO-2026-0170. Delivery Challan: DC-SEED-TRANSFER-01.",
+        "timestampUtc": "2026-10-27T19:04:23.749Z"
       },
       {
-        "id": "GA-23ba643e",
-        "grnId": "GRN-MVR12IGH-c93c5a",
+        "id": "GA-0a85a567",
+        "grnId": "GRN-MVR216MD-aae7d4",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "SubmittedForInspection",
         "comments": "Physical delivery submitted for quality inspection.",
-        "timestampUtc": "2026-10-27T18:37:26.135Z"
+        "timestampUtc": "2026-10-27T19:04:23.755Z"
       },
       {
-        "id": "GA-2b05fae1",
-        "grnId": "GRN-MVR12IGH-c93c5a",
+        "id": "GA-6e59c803",
+        "grnId": "GRN-MVR216MD-aae7d4",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Inspected",
         "comments": "QA Inspection completed per SOP SCM-F-01. Accepted: 100, Rejected: 0.",
-        "timestampUtc": "2026-10-27T18:37:26.143Z"
+        "timestampUtc": "2026-10-27T19:04:23.762Z"
       },
       {
-        "id": "GA-c261d6c4",
-        "grnId": "GRN-MVR12IGH-c93c5a",
+        "id": "GA-052dd6e4",
+        "grnId": "GRN-MVR216MD-aae7d4",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Approved",
         "comments": "Goods Received Note approved for inventory ledger posting.",
-        "timestampUtc": "2026-10-27T18:37:26.147Z"
+        "timestampUtc": "2026-10-27T19:04:23.772Z"
       },
       {
-        "id": "GA-094b56a5",
-        "grnId": "GRN-MVR12IGH-c93c5a",
+        "id": "GA-df8c90c4",
+        "grnId": "GRN-MVR216MD-aae7d4",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Posted",
-        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0160 status updated to FullyReceived.",
-        "timestampUtc": "2026-10-27T18:37:26.156Z"
+        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0170 status updated to FullyReceived.",
+        "timestampUtc": "2026-10-27T19:04:23.784Z"
       }
     ],
     "receivedByUserId": "USR-ADMIN-01",
     "receivedByName": "Alexander Vance",
-    "createdAtUtc": "2026-10-27T18:37:26.129Z",
-    "updatedAtUtc": "2026-10-27T18:37:26.156Z",
+    "createdAtUtc": "2026-10-27T19:04:23.749Z",
+    "updatedAtUtc": "2026-10-27T19:04:23.784Z",
     "inspectedByUserId": "USR-ADMIN-01",
     "inspectedByName": "Alexander Vance",
-    "inspectedAtUtc": "2026-10-27T18:37:26.143Z",
+    "inspectedAtUtc": "2026-10-27T19:04:23.762Z",
     "approvedByUserId": "USR-ADMIN-01",
     "approvedByName": "Alexander Vance",
-    "approvedAtUtc": "2026-10-27T18:37:26.147Z",
+    "approvedAtUtc": "2026-10-27T19:04:23.772Z",
     "postedByUserId": "USR-ADMIN-01",
     "postedByName": "Alexander Vance",
-    "postedAtUtc": "2026-10-27T18:37:26.156Z"
+    "postedAtUtc": "2026-10-27T19:04:23.784Z"
   },
   {
-    "id": "GRN-MVR12I3W-39885a",
+    "id": "GRN-MVR216AC-373f52",
     "grnNumber": "GRN-2026-0005",
-    "purchaseOrderId": "PO-MVR12I2K-49e08d",
-    "purchaseOrderNumber": "PO-2026-0159",
+    "purchaseOrderId": "PO-MVR21694-22292d",
+    "purchaseOrderNumber": "PO-2026-0169",
     "supplierId": "SUP-APEX-01",
     "supplierCode": "SUP-APEX",
     "supplierName": "Apex Structural Steel & Rebar Ltd.",
@@ -140,7 +140,7 @@
     "warehouseName": "Metro Central Staging Yard",
     "storageLocation": "Site Central Staging Yard",
     "grnDate": "2026-10-27",
-    "receivedAtUtc": "2026-10-27T18:37:25.676Z",
+    "receivedAtUtc": "2026-10-27T19:04:23.316Z",
     "deliveryChallanNumber": "DC-ZERO-01",
     "deliveryChallanDate": "2026-10-27",
     "vehicleNumber": "N/A",
@@ -160,8 +160,8 @@
     },
     "items": [
       {
-        "id": "GRI-549e00bc",
-        "purchaseOrderItemId": "POI-mvr12i2k-deb297",
+        "id": "GRI-dc9ea98a",
+        "purchaseOrderItemId": "POI-mvr21694-302f09",
         "materialId": "MAT-STEEL-01",
         "materialCode": "STEEL-REBAR-T16",
         "materialName": "High-Tensile Deformed Rebar 16mm",
@@ -189,62 +189,62 @@
     "totalAcceptedValue": 0,
     "auditTrail": [
       {
-        "id": "GA-9d813897",
-        "grnId": "GRN-MVR12I3W-39885a",
+        "id": "GA-e4a9e02a",
+        "grnId": "GRN-MVR216AC-373f52",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "DraftCreated",
-        "comments": "Goods Received Note draft created against PO-2026-0159. Delivery Challan: DC-ZERO-01.",
-        "timestampUtc": "2026-10-27T18:37:25.676Z"
+        "comments": "Goods Received Note draft created against PO-2026-0169. Delivery Challan: DC-ZERO-01.",
+        "timestampUtc": "2026-10-27T19:04:23.316Z"
       },
       {
-        "id": "GA-c8938212",
-        "grnId": "GRN-MVR12I3W-39885a",
+        "id": "GA-3d3f1411",
+        "grnId": "GRN-MVR216AC-373f52",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "SubmittedForInspection",
         "comments": "Physical delivery submitted for quality inspection.",
-        "timestampUtc": "2026-10-27T18:37:25.681Z"
+        "timestampUtc": "2026-10-27T19:04:23.320Z"
       },
       {
-        "id": "GA-953eaf9f",
-        "grnId": "GRN-MVR12I3W-39885a",
+        "id": "GA-1a7372ba",
+        "grnId": "GRN-MVR216AC-373f52",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Inspected",
         "comments": "QA Inspection completed per SOP SCM-F-01. Accepted: 5, Rejected: 0.",
-        "timestampUtc": "2026-10-27T18:37:25.689Z"
+        "timestampUtc": "2026-10-27T19:04:23.327Z"
       },
       {
-        "id": "GA-96397a02",
-        "grnId": "GRN-MVR12I3W-39885a",
+        "id": "GA-cf36f1d1",
+        "grnId": "GRN-MVR216AC-373f52",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Approved",
         "comments": "Goods Received Note approved for inventory ledger posting.",
-        "timestampUtc": "2026-10-27T18:37:25.693Z"
+        "timestampUtc": "2026-10-27T19:04:23.331Z"
       }
     ],
     "receivedByUserId": "USR-ADMIN-01",
     "receivedByName": "Alexander Vance",
-    "createdAtUtc": "2026-10-27T18:37:25.676Z",
-    "updatedAtUtc": "2026-10-27T18:37:25.693Z",
+    "createdAtUtc": "2026-10-27T19:04:23.316Z",
+    "updatedAtUtc": "2026-10-27T19:04:23.331Z",
     "inspectedByUserId": "USR-ADMIN-01",
     "inspectedByName": "Alexander Vance",
-    "inspectedAtUtc": "2026-10-27T18:37:25.689Z",
+    "inspectedAtUtc": "2026-10-27T19:04:23.327Z",
     "approvedByUserId": "USR-ADMIN-01",
     "approvedByName": "Alexander Vance",
-    "approvedAtUtc": "2026-10-27T18:37:25.693Z"
+    "approvedAtUtc": "2026-10-27T19:04:23.331Z"
   },
   {
-    "id": "GRN-MVR12I1A-1640fb",
+    "id": "GRN-MVR2167X-5546e3",
     "grnNumber": "GRN-2026-0004",
-    "purchaseOrderId": "PO-MVR12HZX-15793c",
-    "purchaseOrderNumber": "PO-2026-0158",
+    "purchaseOrderId": "PO-MVR2166R-9f247e",
+    "purchaseOrderNumber": "PO-2026-0168",
     "supplierId": "SUP-HORIZON-02",
     "supplierCode": "SUP-HORIZON",
     "supplierName": "Horizon Ready-Mix & Aggregates Corp.",
@@ -254,7 +254,7 @@
     "warehouseName": "Metro Central Staging Yard",
     "storageLocation": "Site Central Staging Yard",
     "grnDate": "2026-10-27",
-    "receivedAtUtc": "2026-10-27T18:37:25.582Z",
+    "receivedAtUtc": "2026-10-27T19:04:23.229Z",
     "deliveryChallanNumber": "DC-HARBOR-01",
     "deliveryChallanDate": "2026-10-27",
     "vehicleNumber": "TRK-HARBOR-01",
@@ -274,8 +274,8 @@
     },
     "items": [
       {
-        "id": "GRI-b4432dbd",
-        "purchaseOrderItemId": "POI-mvr12hzx-ead3fe",
+        "id": "GRI-ce46a44c",
+        "purchaseOrderItemId": "POI-mvr2166r-637fd4",
         "materialId": "MAT-CEM-02",
         "materialCode": "CEM-OPC-50KG",
         "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
@@ -303,75 +303,75 @@
     "totalAcceptedValue": 750,
     "auditTrail": [
       {
-        "id": "GA-6015f375",
-        "grnId": "GRN-MVR12I1A-1640fb",
+        "id": "GA-a2bdb3d7",
+        "grnId": "GRN-MVR2167X-5546e3",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "DraftCreated",
-        "comments": "Goods Received Note draft created against PO-2026-0158. Delivery Challan: DC-HARBOR-01.",
-        "timestampUtc": "2026-10-27T18:37:25.582Z"
+        "comments": "Goods Received Note draft created against PO-2026-0168. Delivery Challan: DC-HARBOR-01.",
+        "timestampUtc": "2026-10-27T19:04:23.229Z"
       },
       {
-        "id": "GA-8fa59c8d",
-        "grnId": "GRN-MVR12I1A-1640fb",
+        "id": "GA-e2d245b6",
+        "grnId": "GRN-MVR2167X-5546e3",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "SubmittedForInspection",
         "comments": "Physical delivery submitted for quality inspection.",
-        "timestampUtc": "2026-10-27T18:37:25.588Z"
+        "timestampUtc": "2026-10-27T19:04:23.234Z"
       },
       {
-        "id": "GA-fef171a3",
-        "grnId": "GRN-MVR12I1A-1640fb",
+        "id": "GA-e6520e12",
+        "grnId": "GRN-MVR2167X-5546e3",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Inspected",
         "comments": "QA Inspection completed per SOP SCM-F-01. Accepted: 50, Rejected: 0.",
-        "timestampUtc": "2026-10-27T18:37:25.596Z"
+        "timestampUtc": "2026-10-27T19:04:23.239Z"
       },
       {
-        "id": "GA-386cf017",
-        "grnId": "GRN-MVR12I1A-1640fb",
+        "id": "GA-1c6e22d1",
+        "grnId": "GRN-MVR2167X-5546e3",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Approved",
         "comments": "Goods Received Note approved for inventory ledger posting.",
-        "timestampUtc": "2026-10-27T18:37:25.601Z"
+        "timestampUtc": "2026-10-27T19:04:23.244Z"
       },
       {
-        "id": "GA-0ee216e3",
-        "grnId": "GRN-MVR12I1A-1640fb",
+        "id": "GA-02f54ddf",
+        "grnId": "GRN-MVR2167X-5546e3",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Posted",
-        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0158 status updated to FullyReceived.",
-        "timestampUtc": "2026-10-27T18:37:25.609Z"
+        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0168 status updated to FullyReceived.",
+        "timestampUtc": "2026-10-27T19:04:23.252Z"
       }
     ],
     "receivedByUserId": "USR-ADMIN-01",
     "receivedByName": "Alexander Vance",
-    "createdAtUtc": "2026-10-27T18:37:25.582Z",
-    "updatedAtUtc": "2026-10-27T18:37:25.609Z",
+    "createdAtUtc": "2026-10-27T19:04:23.229Z",
+    "updatedAtUtc": "2026-10-27T19:04:23.252Z",
     "inspectedByUserId": "USR-ADMIN-01",
     "inspectedByName": "Alexander Vance",
-    "inspectedAtUtc": "2026-10-27T18:37:25.596Z",
+    "inspectedAtUtc": "2026-10-27T19:04:23.239Z",
     "approvedByUserId": "USR-ADMIN-01",
     "approvedByName": "Alexander Vance",
-    "approvedAtUtc": "2026-10-27T18:37:25.601Z",
+    "approvedAtUtc": "2026-10-27T19:04:23.244Z",
     "postedByUserId": "USR-ADMIN-01",
     "postedByName": "Alexander Vance",
-    "postedAtUtc": "2026-10-27T18:37:25.609Z"
+    "postedAtUtc": "2026-10-27T19:04:23.252Z"
   },
   {
-    "id": "GRN-MVR12HYS-d66b49",
+    "id": "GRN-MVR2165J-beb776",
     "grnNumber": "GRN-2026-0003",
-    "purchaseOrderId": "PO-MVR12HX6-a93263",
-    "purchaseOrderNumber": "PO-2026-0157",
+    "purchaseOrderId": "PO-MVR2164B-663d89",
+    "purchaseOrderNumber": "PO-2026-0167",
     "supplierId": "SUP-HORIZON-02",
     "supplierCode": "SUP-HORIZON",
     "supplierName": "Horizon Ready-Mix & Aggregates Corp.",
@@ -381,7 +381,7 @@
     "warehouseName": "Metro Central Staging Yard",
     "storageLocation": "Site Central Staging Yard",
     "grnDate": "2026-10-27",
-    "receivedAtUtc": "2026-10-27T18:37:25.492Z",
+    "receivedAtUtc": "2026-10-27T19:04:23.143Z",
     "deliveryChallanNumber": "DC-CEM-003",
     "deliveryChallanDate": "2026-10-27",
     "vehicleNumber": "TRK-CEM-33",
@@ -401,8 +401,8 @@
     },
     "items": [
       {
-        "id": "GRI-10fb0379",
-        "purchaseOrderItemId": "POI-mvr12hx5-7109e6",
+        "id": "GRI-7654f8d4",
+        "purchaseOrderItemId": "POI-mvr2164b-9d3cb6",
         "materialId": "MAT-CEM-02",
         "materialCode": "CEM-OPC-50KG",
         "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
@@ -430,75 +430,75 @@
     "totalAcceptedValue": 720,
     "auditTrail": [
       {
-        "id": "GA-8e6b2aec",
-        "grnId": "GRN-MVR12HYS-d66b49",
+        "id": "GA-d71bf1e8",
+        "grnId": "GRN-MVR2165J-beb776",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "DraftCreated",
-        "comments": "Goods Received Note draft created against PO-2026-0157. Delivery Challan: DC-CEM-003.",
-        "timestampUtc": "2026-10-27T18:37:25.492Z"
+        "comments": "Goods Received Note draft created against PO-2026-0167. Delivery Challan: DC-CEM-003.",
+        "timestampUtc": "2026-10-27T19:04:23.143Z"
       },
       {
-        "id": "GA-c3cc8c2a",
-        "grnId": "GRN-MVR12HYS-d66b49",
+        "id": "GA-102fcb53",
+        "grnId": "GRN-MVR2165J-beb776",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "SubmittedForInspection",
         "comments": "Physical delivery submitted for quality inspection.",
-        "timestampUtc": "2026-10-27T18:37:25.497Z"
+        "timestampUtc": "2026-10-27T19:04:23.146Z"
       },
       {
-        "id": "GA-f86eb7e6",
-        "grnId": "GRN-MVR12HYS-d66b49",
+        "id": "GA-b6d570f3",
+        "grnId": "GRN-MVR2165J-beb776",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "Inspected",
         "comments": "QA Inspection completed per SOP SCM-F-01. Accepted: 40, Rejected: 0.",
-        "timestampUtc": "2026-10-27T18:37:25.507Z"
+        "timestampUtc": "2026-10-27T19:04:23.154Z"
       },
       {
-        "id": "GA-401094ed",
-        "grnId": "GRN-MVR12HYS-d66b49",
+        "id": "GA-10e93c00",
+        "grnId": "GRN-MVR2165J-beb776",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Approved",
         "comments": "Goods Received Note approved for inventory ledger posting.",
-        "timestampUtc": "2026-10-27T18:37:25.510Z"
+        "timestampUtc": "2026-10-27T19:04:23.159Z"
       },
       {
-        "id": "GA-1dec01b2",
-        "grnId": "GRN-MVR12HYS-d66b49",
+        "id": "GA-983c5cd4",
+        "grnId": "GRN-MVR2165J-beb776",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "Posted",
-        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0157 status updated to FullyReceived.",
-        "timestampUtc": "2026-10-27T18:37:25.517Z"
+        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0167 status updated to FullyReceived.",
+        "timestampUtc": "2026-10-27T19:04:23.167Z"
       }
     ],
     "receivedByUserId": "USR-STR-04",
     "receivedByName": "Marcus Vance",
-    "createdAtUtc": "2026-10-27T18:37:25.492Z",
-    "updatedAtUtc": "2026-10-27T18:37:25.517Z",
+    "createdAtUtc": "2026-10-27T19:04:23.143Z",
+    "updatedAtUtc": "2026-10-27T19:04:23.167Z",
     "inspectedByUserId": "USR-STR-04",
     "inspectedByName": "Marcus Vance",
-    "inspectedAtUtc": "2026-10-27T18:37:25.507Z",
+    "inspectedAtUtc": "2026-10-27T19:04:23.154Z",
     "approvedByUserId": "USR-ADMIN-01",
     "approvedByName": "Alexander Vance",
-    "approvedAtUtc": "2026-10-27T18:37:25.510Z",
+    "approvedAtUtc": "2026-10-27T19:04:23.159Z",
     "postedByUserId": "USR-STR-04",
     "postedByName": "Marcus Vance",
-    "postedAtUtc": "2026-10-27T18:37:25.517Z"
+    "postedAtUtc": "2026-10-27T19:04:23.167Z"
   },
   {
-    "id": "GRN-MVR12HVI-5829df",
+    "id": "GRN-MVR21630-a27488",
     "grnNumber": "GRN-2026-0002",
-    "purchaseOrderId": "PO-MVR12HSK-abe130",
-    "purchaseOrderNumber": "PO-2026-0156",
+    "purchaseOrderId": "PO-MVR2160E-2d0b0d",
+    "purchaseOrderNumber": "PO-2026-0166",
     "supplierId": "SUP-HORIZON-02",
     "supplierCode": "SUP-HORIZON",
     "supplierName": "Horizon Ready-Mix & Aggregates Corp.",
@@ -508,7 +508,7 @@
     "warehouseName": "Metro Central Staging Yard",
     "storageLocation": "Metro Central Yard",
     "grnDate": "2026-10-27",
-    "receivedAtUtc": "2026-10-27T18:37:25.374Z",
+    "receivedAtUtc": "2026-10-27T19:04:23.052Z",
     "deliveryChallanNumber": "DC-CEM-002",
     "deliveryChallanDate": "2026-10-27",
     "vehicleNumber": "TRK-CEM-22",
@@ -528,8 +528,8 @@
     },
     "items": [
       {
-        "id": "GRI-460a0caa",
-        "purchaseOrderItemId": "POI-mvr12hsk-5f3999",
+        "id": "GRI-55eef446",
+        "purchaseOrderItemId": "POI-mvr2160e-074c74",
         "materialId": "MAT-CEM-02",
         "materialCode": "CEM-OPC-50KG",
         "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
@@ -558,75 +558,75 @@
     "totalAcceptedValue": 250,
     "auditTrail": [
       {
-        "id": "GA-b5eb2e6b",
-        "grnId": "GRN-MVR12HVI-5829df",
+        "id": "GA-8f8a7579",
+        "grnId": "GRN-MVR21630-a27488",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "DraftCreated",
-        "comments": "Goods Received Note draft created against PO-2026-0156. Delivery Challan: DC-CEM-002.",
-        "timestampUtc": "2026-10-27T18:37:25.374Z"
+        "comments": "Goods Received Note draft created against PO-2026-0166. Delivery Challan: DC-CEM-002.",
+        "timestampUtc": "2026-10-27T19:04:23.052Z"
       },
       {
-        "id": "GA-325b437c",
-        "grnId": "GRN-MVR12HVI-5829df",
+        "id": "GA-67961e19",
+        "grnId": "GRN-MVR21630-a27488",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "SubmittedForInspection",
         "comments": "Physical delivery submitted for quality inspection.",
-        "timestampUtc": "2026-10-27T18:37:25.379Z"
+        "timestampUtc": "2026-10-27T19:04:23.056Z"
       },
       {
-        "id": "GA-80c968a5",
-        "grnId": "GRN-MVR12HVI-5829df",
+        "id": "GA-4638c9ba",
+        "grnId": "GRN-MVR21630-a27488",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "Inspected",
         "comments": "QA Inspection completed per SOP SCM-F-01. Accepted: 20, Rejected: 10.",
-        "timestampUtc": "2026-10-27T18:37:25.387Z"
+        "timestampUtc": "2026-10-27T19:04:23.062Z"
       },
       {
-        "id": "GA-adc64f47",
-        "grnId": "GRN-MVR12HVI-5829df",
+        "id": "GA-69b9912a",
+        "grnId": "GRN-MVR21630-a27488",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Approved",
         "comments": "Goods Received Note approved for inventory ledger posting.",
-        "timestampUtc": "2026-10-27T18:37:25.391Z"
+        "timestampUtc": "2026-10-27T19:04:23.066Z"
       },
       {
-        "id": "GA-7a80a715",
-        "grnId": "GRN-MVR12HVI-5829df",
+        "id": "GA-5203aaa0",
+        "grnId": "GRN-MVR21630-a27488",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "Posted",
-        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0156 status updated to PartiallyReceived.",
-        "timestampUtc": "2026-10-27T18:37:25.399Z"
+        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0166 status updated to PartiallyReceived.",
+        "timestampUtc": "2026-10-27T19:04:23.073Z"
       }
     ],
     "receivedByUserId": "USR-STR-04",
     "receivedByName": "Marcus Vance",
-    "createdAtUtc": "2026-10-27T18:37:25.374Z",
-    "updatedAtUtc": "2026-10-27T18:37:25.399Z",
+    "createdAtUtc": "2026-10-27T19:04:23.052Z",
+    "updatedAtUtc": "2026-10-27T19:04:23.073Z",
     "inspectedByUserId": "USR-STR-04",
     "inspectedByName": "Marcus Vance",
-    "inspectedAtUtc": "2026-10-27T18:37:25.387Z",
+    "inspectedAtUtc": "2026-10-27T19:04:23.062Z",
     "approvedByUserId": "USR-ADMIN-01",
     "approvedByName": "Alexander Vance",
-    "approvedAtUtc": "2026-10-27T18:37:25.391Z",
+    "approvedAtUtc": "2026-10-27T19:04:23.066Z",
     "postedByUserId": "USR-STR-04",
     "postedByName": "Marcus Vance",
-    "postedAtUtc": "2026-10-27T18:37:25.399Z"
+    "postedAtUtc": "2026-10-27T19:04:23.073Z"
   },
   {
-    "id": "GRN-MVR12HU3-2a6a3a",
+    "id": "GRN-MVR2161R-15cdbe",
     "grnNumber": "GRN-2026-0001",
-    "purchaseOrderId": "PO-MVR12HSK-abe130",
-    "purchaseOrderNumber": "PO-2026-0156",
+    "purchaseOrderId": "PO-MVR2160E-2d0b0d",
+    "purchaseOrderNumber": "PO-2026-0166",
     "supplierId": "SUP-HORIZON-02",
     "supplierCode": "SUP-HORIZON",
     "supplierName": "Horizon Ready-Mix & Aggregates Corp.",
@@ -636,7 +636,7 @@
     "warehouseName": "Metro Central Staging Yard",
     "storageLocation": "Metro Central Yard",
     "grnDate": "2026-10-27",
-    "receivedAtUtc": "2026-10-27T18:37:25.323Z",
+    "receivedAtUtc": "2026-10-27T19:04:23.007Z",
     "deliveryChallanNumber": "DC-CEM-001",
     "deliveryChallanDate": "2026-10-27",
     "vehicleNumber": "TRK-CEM-11",
@@ -656,8 +656,8 @@
     },
     "items": [
       {
-        "id": "GRI-fa28957c",
-        "purchaseOrderItemId": "POI-mvr12hsk-5f3999",
+        "id": "GRI-c6ca41c7",
+        "purchaseOrderItemId": "POI-mvr2160e-074c74",
         "materialId": "MAT-CEM-02",
         "materialCode": "CEM-OPC-50KG",
         "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
@@ -685,68 +685,68 @@
     "totalAcceptedValue": 500,
     "auditTrail": [
       {
-        "id": "GA-2d63ac59",
-        "grnId": "GRN-MVR12HU3-2a6a3a",
+        "id": "GA-9d1553b2",
+        "grnId": "GRN-MVR2161R-15cdbe",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "DraftCreated",
-        "comments": "Goods Received Note draft created against PO-2026-0156. Delivery Challan: DC-CEM-001.",
-        "timestampUtc": "2026-10-27T18:37:25.323Z"
+        "comments": "Goods Received Note draft created against PO-2026-0166. Delivery Challan: DC-CEM-001.",
+        "timestampUtc": "2026-10-27T19:04:23.007Z"
       },
       {
-        "id": "GA-255a2850",
-        "grnId": "GRN-MVR12HU3-2a6a3a",
+        "id": "GA-4a934943",
+        "grnId": "GRN-MVR2161R-15cdbe",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "SubmittedForInspection",
         "comments": "Physical delivery submitted for quality inspection.",
-        "timestampUtc": "2026-10-27T18:37:25.327Z"
+        "timestampUtc": "2026-10-27T19:04:23.010Z"
       },
       {
-        "id": "GA-6647c6ae",
-        "grnId": "GRN-MVR12HU3-2a6a3a",
+        "id": "GA-686cd0f4",
+        "grnId": "GRN-MVR2161R-15cdbe",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "Inspected",
         "comments": "QA Inspection completed per SOP SCM-F-01. Accepted: 40, Rejected: 0.",
-        "timestampUtc": "2026-10-27T18:37:25.339Z"
+        "timestampUtc": "2026-10-27T19:04:23.019Z"
       },
       {
-        "id": "GA-152f5daa",
-        "grnId": "GRN-MVR12HU3-2a6a3a",
+        "id": "GA-8a175c01",
+        "grnId": "GRN-MVR2161R-15cdbe",
         "actorUserId": "USR-ADMIN-01",
         "actorName": "Alexander Vance",
         "actorRole": "SuperAdmin",
         "action": "Approved",
         "comments": "Goods Received Note approved for inventory ledger posting.",
-        "timestampUtc": "2026-10-27T18:37:25.343Z"
+        "timestampUtc": "2026-10-27T19:04:23.025Z"
       },
       {
-        "id": "GA-dd9d3e48",
-        "grnId": "GRN-MVR12HU3-2a6a3a",
+        "id": "GA-2c3a8bf4",
+        "grnId": "GRN-MVR2161R-15cdbe",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "Posted",
-        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0156 status updated to PartiallyReceived.",
-        "timestampUtc": "2026-10-27T18:37:25.356Z"
+        "comments": "GRN posted to durable receipt ledger & stock ledger. Purchase Order PO-2026-0166 status updated to PartiallyReceived.",
+        "timestampUtc": "2026-10-27T19:04:23.035Z"
       }
     ],
     "receivedByUserId": "USR-STR-04",
     "receivedByName": "Marcus Vance",
-    "createdAtUtc": "2026-10-27T18:37:25.323Z",
-    "updatedAtUtc": "2026-10-27T18:37:25.356Z",
+    "createdAtUtc": "2026-10-27T19:04:23.007Z",
+    "updatedAtUtc": "2026-10-27T19:04:23.035Z",
     "inspectedByUserId": "USR-STR-04",
     "inspectedByName": "Marcus Vance",
-    "inspectedAtUtc": "2026-10-27T18:37:25.339Z",
+    "inspectedAtUtc": "2026-10-27T19:04:23.019Z",
     "approvedByUserId": "USR-ADMIN-01",
     "approvedByName": "Alexander Vance",
-    "approvedAtUtc": "2026-10-27T18:37:25.343Z",
+    "approvedAtUtc": "2026-10-27T19:04:23.025Z",
     "postedByUserId": "USR-STR-04",
     "postedByName": "Marcus Vance",
-    "postedAtUtc": "2026-10-27T18:37:25.356Z"
+    "postedAtUtc": "2026-10-27T19:04:23.035Z"
   }
 ]

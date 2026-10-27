@@ -14,9 +14,29 @@ const JWT_ISSUER = 'https://constructcorp.internal';
 const JWT_AUDIENCE = 'https://constructstock.app';
 
 // Local JSON Storage Directory (Outside build output, protected from static serving)
-const DATA_DIR = path.resolve(__dirname, 'data');
+const DATA_DIR = process.env.VERCEL
+  ? path.resolve('/tmp', 'data')
+  : path.resolve(__dirname, 'data');
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+if (process.env.VERCEL) {
+  try {
+    const srcDataDir = path.resolve(__dirname, 'data');
+    if (fs.existsSync(srcDataDir)) {
+      const files = fs.readdirSync(srcDataDir);
+      for (const file of files) {
+        const destPath = path.join(DATA_DIR, file);
+        if (!fs.existsSync(destPath)) {
+          fs.copyFileSync(path.join(srcDataDir, file), destPath);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[ConstructionStock] Error copying seed data to /tmp:', err);
+  }
 }
 
 app.use(express.json());
@@ -9046,6 +9066,10 @@ async function startServer() {
   }
 }
 
-startServer().catch((err) => {
-  console.error('[ConstructionStock] Server start error:', err);
-});
+if (!process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error('[ConstructionStock] Server start error:', err);
+  });
+}
+
+export default app;

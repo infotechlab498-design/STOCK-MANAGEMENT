@@ -553,5 +553,24 @@
     "createdByUserId": "USR-ADMIN-01",
     "updatedAtUtc": "2026-10-27T18:37:24.407Z",
     "updatedByUserId": "USR-ADMIN-01"
+  },
+  {
+    "id": "MAT-MVR215ES",
+    "itemCode": "TEST-REBAR-MVR215EQ",
+    "normalizedItemCode": "TEST-REBAR-MVR215EQ",
+    "name": "Updated High Tensile Rebar 25mm Grade 500B",
+    "description": "Updated description for testing",
+    "specification": "BS 4449 Grade 500B, 12m",
+    "categoryId": "CAT-STEEL",
+    "categoryName": "Structural Steel & Rebar",
+    "baseUnitId": "UNT-MT",
+    "baseUnitName": "Metric Tonne",
+    "minimumStockLevel": 20,
+    "reorderLevel": 45,
+    "isActive": true,
+    "createdAtUtc": "2026-10-27T19:04:22.180Z",
+    "createdByUserId": "USR-ADMIN-01",
+    "updatedAtUtc": "2026-10-27T19:04:22.205Z",
+    "updatedByUserId": "USR-ADMIN-01"
   }
 ]

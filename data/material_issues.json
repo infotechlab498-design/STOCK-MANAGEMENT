@@ -1,6 +1,6 @@
 [
   {
-    "id": "ISS-MVR12GS6-3aefaa",
+    "id": "ISS-MVR2154W-83f3e2",
     "issueNumber": "MIV-2026-0001",
     "requisitionId": "REQ-TEST-P10",
     "requisitionNumber": "REQ-2026-9999",
@@ -15,8 +15,8 @@
     "receivedByPerson": "Site Eng Alex Vance",
     "items": [
       {
-        "id": "MII-mvr12gs6-0-288c",
-        "materialIssueId": "ISS-MVR12GS6-3aefaa",
+        "id": "MII-mvr2154w-0-3314",
+        "materialIssueId": "ISS-MVR2154W-83f3e2",
         "requisitionItemId": "REQ-ITEM-P10-1",
         "materialId": "MAT-001",
         "materialCode": "CONC-40",
@@ -31,65 +31,65 @@
         "actualIssuedQuantity": 30,
         "unitCost": 120,
         "totalIssuedAmount": 3600,
-        "stockLedgerEntryId": "STK-TXN-MVR12GSO-4cf692",
+        "stockLedgerEntryId": "STK-TXN-MVR21558-b5a416",
         "previouslyReturnedQuantity": 10
       }
     ],
     "auditTrail": [
       {
-        "id": "IA-f0482c2d",
-        "materialIssueId": "ISS-MVR12GS6-3aefaa",
+        "id": "IA-7cd79fd9",
+        "materialIssueId": "ISS-MVR2154W-83f3e2",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "DraftCreated",
         "comments": "Material issue draft created against REQ-2026-9999 for activity: Pier Cap Structural Pour Section 1",
-        "timestampUtc": "2026-10-27T18:37:23.957Z"
+        "timestampUtc": "2026-10-27T19:04:21.823Z"
       },
       {
-        "id": "IA-3eb1f1bb",
-        "materialIssueId": "ISS-MVR12GS6-3aefaa",
+        "id": "IA-97f54eb9",
+        "materialIssueId": "ISS-MVR2154W-83f3e2",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "Submitted",
         "comments": "Submitted for issue approval & stock verification.",
-        "timestampUtc": "2026-10-27T18:37:23.961Z"
+        "timestampUtc": "2026-10-27T19:04:21.827Z"
       },
       {
-        "id": "IA-4152bb40",
-        "materialIssueId": "ISS-MVR12GS6-3aefaa",
+        "id": "IA-059604a8",
+        "materialIssueId": "ISS-MVR2154W-83f3e2",
         "actorUserId": "USR-PM-03",
         "actorName": "David Sterling",
         "actorRole": "ProjectManager",
         "action": "Approved",
         "comments": "Verified site readiness and concrete delivery schedule",
-        "timestampUtc": "2026-10-27T18:37:23.967Z"
+        "timestampUtc": "2026-10-27T19:04:21.832Z"
       },
       {
-        "id": "IA-e2229f7e",
-        "materialIssueId": "ISS-MVR12GS6-3aefaa",
+        "id": "IA-7ece45b5",
+        "materialIssueId": "ISS-MVR2154W-83f3e2",
         "actorUserId": "USR-STR-04",
         "actorName": "Marcus Vance",
         "actorRole": "Storekeeper",
         "action": "Posted",
         "comments": "Material issue posted to stock ledger. 1 line items dispatched. Source requisition status updated.",
-        "timestampUtc": "2026-10-27T18:37:23.976Z"
+        "timestampUtc": "2026-10-27T19:04:21.836Z"
       }
     ],
     "remarks": "Inspect concrete slump before pour",
     "createdByUserId": "USR-STR-04",
     "createdByName": "Marcus Vance",
-    "createdAtUtc": "2026-10-27T18:37:23.957Z",
+    "createdAtUtc": "2026-10-27T19:04:21.823Z",
     "submittedByUserId": "USR-STR-04",
     "submittedByName": "Marcus Vance",
-    "submittedAtUtc": "2026-10-27T18:37:23.961Z",
-    "updatedAtUtc": "2026-10-27T18:37:24.014Z",
+    "submittedAtUtc": "2026-10-27T19:04:21.827Z",
+    "updatedAtUtc": "2026-10-27T19:04:21.862Z",
     "approvedByUserId": "USR-PM-03",
     "approvedByName": "David Sterling",
-    "approvedAtUtc": "2026-10-27T18:37:23.967Z",
+    "approvedAtUtc": "2026-10-27T19:04:21.832Z",
     "postedByUserId": "USR-STR-04",
     "postedByName": "Marcus Vance",
-    "postedAtUtc": "2026-10-27T18:37:23.976Z"
+    "postedAtUtc": "2026-10-27T19:04:21.836Z"
   }
 ]
