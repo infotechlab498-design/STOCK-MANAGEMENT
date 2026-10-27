@@ -1,0 +1,47 @@
+[
+  {
+    "id": "SUP-APEX-01",
+    "supplierCode": "SUP-APEX",
+    "name": "Apex Structural Steel & Rebar Ltd.",
+    "contactPerson": "Robert Jenkins",
+    "phone": "+1 (555) 342-8800",
+    "email": "orders@apexsteel.com",
+    "address": "142 Industrial Way, Sector 4, Metro City",
+    "taxReference": "TAX-US-8849201",
+    "paymentTerms": "Net 30 Days",
+    "notes": "Certified mill distributor for Grade 500B deformed rebar and wire mesh.",
+    "isActive": true,
+    "createdAtUtc": "2026-01-10T08:00:00Z",
+    "createdByUserId": "USR-ADMIN-01"
+  },
+  {
+    "id": "SUP-HORIZON-02",
+    "supplierCode": "SUP-HORIZON",
+    "name": "Horizon Ready-Mix & Aggregates Corp.",
+    "contactPerson": "Elena Gomez",
+    "phone": "+1 (555) 789-2244",
+    "email": "supply@horizonaggregates.com",
+    "address": "88 Quarry Basin Road, North Harbor",
+    "taxReference": "TAX-US-6629104",
+    "paymentTerms": "Net 15 Days",
+    "notes": "Direct quarry operator for washed river sand, 20mm gravel, and CEM I cement.",
+    "isActive": true,
+    "createdAtUtc": "2026-01-12T09:30:00Z",
+    "createdByUserId": "USR-ADMIN-01"
+  },
+  {
+    "id": "SUP-VULCAN-03",
+    "supplierCode": "SUP-VULCAN",
+    "name": "Vulcan Piping & Infrastructure Supplies",
+    "contactPerson": "Marcus Sterling",
+    "phone": "+1 (555) 443-9090",
+    "email": "sales@vulcanpipes.com",
+    "address": "520 Logistics Boulevard, Central Depot",
+    "taxReference": "TAX-US-3391820",
+    "paymentTerms": "Net 45 Days",
+    "notes": "Approved supplier for heavy-duty uPVC and PPR drainage and stormwater piping systems.",
+    "isActive": true,
+    "createdAtUtc": "2026-01-18T11:15:00Z",
+    "createdByUserId": "USR-ADMIN-01"
+  }
+]

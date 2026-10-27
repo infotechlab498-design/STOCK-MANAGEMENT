@@ -1,0 +1,66 @@
+[
+  {
+    "id": "QT-2026-0001",
+    "quotationReference": "QT-APEX-2026-04",
+    "supplierId": "SUP-APEX-01",
+    "supplierName": "Apex Structural Steel & Rebar Ltd.",
+    "date": "2026-02-10",
+    "validUntil": "2026-04-30",
+    "currency": "USD",
+    "paymentTerms": "Net 30 Days",
+    "notes": "Firm quotation for high-tensile Grade 500B rebar and mesh.",
+    "items": [
+      {
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 20,
+        "unitRate": 780.0,
+        "discount": 0,
+        "taxRate": 5.0,
+        "estimatedFreight": 250.0,
+        "lineTotal": 16380.0
+      }
+    ],
+    "createdAtUtc": "2026-02-10T10:00:00Z"
+  },
+  {
+    "id": "QT-2026-0002",
+    "quotationReference": "QT-HORIZON-2026-12",
+    "supplierId": "SUP-HORIZON-02",
+    "supplierName": "Horizon Ready-Mix & Aggregates Corp.",
+    "date": "2026-02-11",
+    "validUntil": "2026-04-30",
+    "currency": "USD",
+    "paymentTerms": "Net 15 Days",
+    "notes": "Direct quarry supply quotation for cement and granite aggregates.",
+    "items": [
+      {
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "unitCode": "Bag (50kg standard)",
+        "quotedQuantity": 500,
+        "unitRate": 9.20,
+        "discount": 0.20,
+        "taxRate": 5.0,
+        "estimatedFreight": 150.0,
+        "lineTotal": 4725.0
+      },
+      {
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 50,
+        "unitRate": 34.0,
+        "discount": 0,
+        "taxRate": 5.0,
+        "estimatedFreight": 200.0,
+        "lineTotal": 1785.0
+      }
+    ],
+    "createdAtUtc": "2026-02-11T11:00:00Z"
+  }
+]

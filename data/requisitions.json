@@ -1,0 +1,482 @@
+[
+  {
+    "id": "REQ-2026-0001",
+    "requisitionNumber": "MR-2026-0001",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-15",
+    "priority": "High",
+    "purpose": "Pier foundation reinforcement pouring for elevated guideway Pier P-14 to P-18.",
+    "workActivity": "Substructure Structural Concrete Pour",
+    "siteLocationDetail": "Pier Grid Line 44-50, Sector North",
+    "status": "Submitted",
+    "items": [
+      {
+        "id": "RQI-01-01",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 15.5,
+        "unitId": "UNT-MT",
+        "unitCode": "MT",
+        "remarks": "Standard 12m lengths, bundled with mill test certificates",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-01-02",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 250,
+        "unitId": "UNT-BAG",
+        "unitCode": "BAG",
+        "remarks": "Moisture-sealed pallets for batching plant silo buffer",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-01-01",
+        "requisitionId": "REQ-2026-0001",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Initial draft compiled from site casting yard requirement schedule.",
+        "timestampUtc": "2026-10-25T08:15:00Z"
+      },
+      {
+        "id": "HIS-01-02",
+        "requisitionId": "REQ-2026-0001",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for Project Manager review prior to upcoming scheduled pour.",
+        "timestampUtc": "2026-10-25T09:30:00Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-25T08:15:00Z",
+    "updatedAtUtc": "2026-10-25T09:30:00Z"
+  },
+  {
+    "id": "REQ-2026-0002",
+    "requisitionNumber": "MR-2026-0002",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-05",
+    "priority": "Urgent",
+    "purpose": "Stormwater culvert drainage bypass installation along corridor perimeter.",
+    "workActivity": "Civil Infrastructure Drainage",
+    "siteLocationDetail": "Culvert Section KM 12+400",
+    "status": "Approved",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-24T16:00:00Z",
+    "items": [
+      {
+        "id": "RQI-02-01",
+        "materialId": "MAT-PIPE-04",
+        "materialCode": "PIPE-PVC-110MM",
+        "materialName": "Heavy Duty PVC Drainage Pipe 110mm x 6m",
+        "categoryId": "CAT-PLUMBING",
+        "categoryName": "Plumbing & Drainage",
+        "requestedQuantity": 80,
+        "unitId": "UNT-PCS",
+        "unitCode": "PCS",
+        "remarks": "SN8 class specification required for trench under roadway",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-02-02",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 35,
+        "unitId": "UNT-MT",
+        "unitCode": "MT",
+        "remarks": "Bedding gravel for pipe envelope",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-02-01",
+        "requisitionId": "REQ-2026-0002",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Created for urgently needed perimeter diversion works.",
+        "timestampUtc": "2026-10-24T14:00:00Z"
+      },
+      {
+        "id": "HIS-02-02",
+        "requisitionId": "REQ-2026-0002",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Urgent review requested due to rainfall forecast next week.",
+        "timestampUtc": "2026-10-24T14:45:00Z"
+      },
+      {
+        "id": "HIS-02-03",
+        "requisitionId": "REQ-2026-0002",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Quantities cross-checked against drainage design drawings DWG-DR-104. Validated for procurement / issue dispatch.",
+        "timestampUtc": "2026-10-24T16:00:00Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-24T14:00:00Z",
+    "updatedAtUtc": "2026-10-24T16:00:00Z"
+  },
+  {
+    "id": "REQ-2026-0003",
+    "requisitionNumber": "MR-2026-0003",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-20",
+    "priority": "Medium",
+    "purpose": "Retaining wall backfill and surface grading.",
+    "workActivity": "Earthworks & Slope Stabilization",
+    "siteLocationDetail": "Embankment West Ramp",
+    "status": "ReturnedForCorrection",
+    "correctionNotes": "Requested aggregate quantity of 120 MT exceeds the approved weekly phase quota (max 60 MT). Please adjust quantity or provide phased breakdown.",
+    "items": [
+      {
+        "id": "RQI-03-01",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 120,
+        "unitId": "UNT-MT",
+        "unitCode": "MT",
+        "remarks": "Backfill layer 2",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-03-01",
+        "requisitionId": "REQ-2026-0003",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Initial draft compiled.",
+        "timestampUtc": "2026-10-23T11:00:00Z"
+      },
+      {
+        "id": "HIS-03-02",
+        "requisitionId": "REQ-2026-0003",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for approval.",
+        "timestampUtc": "2026-10-23T11:30:00Z"
+      },
+      {
+        "id": "HIS-03-03",
+        "requisitionId": "REQ-2026-0003",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Requested aggregate quantity of 120 MT exceeds the approved weekly phase quota (max 60 MT). Please adjust quantity or provide phased breakdown.",
+        "timestampUtc": "2026-10-23T15:20:00Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-23T11:00:00Z",
+    "updatedAtUtc": "2026-10-23T15:20:00Z"
+  },
+  {
+    "id": "REQ-2026-0004",
+    "requisitionNumber": "MR-2026-0004",
+    "projectId": "PRJ-102",
+    "projectCode": "PRJ-HARBOR",
+    "projectName": "Harbor Commercial Docklands",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-30",
+    "priority": "Low",
+    "purpose": "Site shed electrical hookup and perimeter lighting conduits.",
+    "workActivity": "Temporary Site Utilities Setup",
+    "siteLocationDetail": "Administration Compound Sector 1",
+    "status": "Draft",
+    "items": [
+      {
+        "id": "RQI-04-01",
+        "materialId": "MAT-PIPE-04",
+        "materialCode": "PIPE-PVC-110MM",
+        "materialName": "Heavy Duty PVC Drainage Pipe 110mm x 6m",
+        "categoryId": "CAT-PLUMBING",
+        "categoryName": "Plumbing & Drainage",
+        "requestedQuantity": 20,
+        "unitId": "UNT-PCS",
+        "unitCode": "PCS",
+        "remarks": "Cable ducting casing",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-04-01",
+        "requisitionId": "REQ-2026-0004",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Drafting initial utility materials requirement.",
+        "timestampUtc": "2026-10-26T10:00:00Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-26T10:00:00Z",
+    "updatedAtUtc": "2026-10-26T10:00:00Z"
+  },
+  {
+    "id": "REQ-mvqq3s60-975c33",
+    "requisitionNumber": "MR-2026-0005",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-25",
+    "priority": "High",
+    "purpose": "Guideway pier cap reinforcement steel cage fabrication.",
+    "workActivity": "Pier Cap Structural Pour",
+    "siteLocationDetail": "Pier 22-26, North Staging Yard",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-81e410f3",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 8,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "Adjusted to weekly phase limit per PM instruction",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-fced1537",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 100,
+        "unitId": "UNT-BAG",
+        "unitCode": "Bag (50kg standard)",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-693c771f",
+        "requisitionId": "REQ-mvqq3s60-975c33",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T13:30:29.592Z"
+      },
+      {
+        "id": "HIS-dfe7f1c5",
+        "requisitionId": "REQ-mvqq3s60-975c33",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for PM review before fabrication.",
+        "timestampUtc": "2026-10-27T13:30:29.601Z"
+      },
+      {
+        "id": "HIS-74717bb0",
+        "requisitionId": "REQ-mvqq3s60-975c33",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Reduce rebar quantity from 12.5 MT to 8.0 MT to align with weekly pouring cycle.",
+        "timestampUtc": "2026-10-27T13:30:29.616Z"
+      },
+      {
+        "id": "HIS-b3c764bd",
+        "requisitionId": "REQ-mvqq3s60-975c33",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Updated",
+        "comments": "Adjusted rebar quantity to 8.0 MT.",
+        "timestampUtc": "2026-10-27T13:30:29.620Z"
+      },
+      {
+        "id": "HIS-8564ae2d",
+        "requisitionId": "REQ-mvqq3s60-975c33",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Resubmitting with reduced rebar quantity.",
+        "timestampUtc": "2026-10-27T13:30:29.623Z"
+      },
+      {
+        "id": "HIS-22bb2aed",
+        "requisitionId": "REQ-mvqq3s60-975c33",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Adjusted quantities verified against site schedule.",
+        "timestampUtc": "2026-10-27T13:30:29.626Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T13:30:29.592Z",
+    "updatedAtUtc": "2026-10-27T13:30:29.626Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T13:30:29.626Z"
+  },
+  {
+    "id": "REQ-mvqqazz5-372709",
+    "requisitionNumber": "MR-2026-0006",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-25",
+    "priority": "High",
+    "purpose": "Guideway pier cap reinforcement steel cage fabrication.",
+    "workActivity": "Pier Cap Structural Pour",
+    "siteLocationDetail": "Pier 22-26, North Staging Yard",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-62e2b28d",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 8,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "Adjusted to weekly phase limit per PM instruction",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-00a77080",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 100,
+        "unitId": "UNT-BAG",
+        "unitCode": "Bag (50kg standard)",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-d6def631",
+        "requisitionId": "REQ-mvqqazz5-372709",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T13:36:06.305Z"
+      },
+      {
+        "id": "HIS-ee41e34f",
+        "requisitionId": "REQ-mvqqazz5-372709",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for PM review before fabrication.",
+        "timestampUtc": "2026-10-27T13:36:06.317Z"
+      },
+      {
+        "id": "HIS-3927b70b",
+        "requisitionId": "REQ-mvqqazz5-372709",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Reduce rebar quantity from 12.5 MT to 8.0 MT to align with weekly pouring cycle.",
+        "timestampUtc": "2026-10-27T13:36:06.332Z"
+      },
+      {
+        "id": "HIS-ad360d2c",
+        "requisitionId": "REQ-mvqqazz5-372709",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Updated",
+        "comments": "Adjusted rebar quantity to 8.0 MT.",
+        "timestampUtc": "2026-10-27T13:36:06.342Z"
+      },
+      {
+        "id": "HIS-b0456c6d",
+        "requisitionId": "REQ-mvqqazz5-372709",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Resubmitting with reduced rebar quantity.",
+        "timestampUtc": "2026-10-27T13:36:06.346Z"
+      },
+      {
+        "id": "HIS-230439e6",
+        "requisitionId": "REQ-mvqqazz5-372709",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Adjusted quantities verified against site schedule.",
+        "timestampUtc": "2026-10-27T13:36:06.350Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T13:36:06.305Z",
+    "updatedAtUtc": "2026-10-27T13:36:06.350Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T13:36:06.350Z"
+  }
+]

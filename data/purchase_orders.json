@@ -1,0 +1,103 @@
+[
+  {
+    "id": "PO-2026-0001",
+    "poNumber": "PO-2026-0001",
+    "supplierId": "SUP-APEX-01",
+    "supplierCode": "SUP-APEX",
+    "supplierName": "Apex Structural Steel & Rebar Ltd.",
+    "supplierContact": "Robert Jenkins (orders@apexsteel.com)",
+    "requisitionId": null,
+    "requisitionNumber": null,
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "deliveryLocation": "WH-01 Metro Central Staging Yard",
+    "orderDate": "2026-02-15",
+    "expectedDeliveryDate": "2026-03-01",
+    "currency": "USD",
+    "paymentTerms": "Net 30 Days",
+    "notes": "Initial procurement for foundation footing rebar. Standalone operational order.",
+    "status": "Issued",
+    "items": [
+      {
+        "id": "POI-INIT-01",
+        "parentPoId": "PO-2026-0001",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "specification": "Grade 500B / BS 4449, 12m standard lengths",
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "requisitionItemId": null,
+        "orderedQuantity": 15,
+        "receivedQuantity": 0,
+        "outstandingQuantity": 15,
+        "unitRate": 780.0,
+        "lineDiscount": 0,
+        "taxRate": 5.0,
+        "taxAmount": 585.0,
+        "lineTotal": 12285.0,
+        "notes": "Delivered in bundled 12m lengths."
+      }
+    ],
+    "subtotal": 11700.0,
+    "itemsDiscount": 0,
+    "headerDiscount": 0,
+    "totalDiscount": 0,
+    "taxAmount": 585.0,
+    "freight": 250.0,
+    "grandTotal": 12535.0,
+    "approvalHistory": [
+      {
+        "id": "PO-HIS-01",
+        "poId": "PO-2026-0001",
+        "actorUserId": "USR-PROC-05",
+        "actorName": "Samantha Lee",
+        "actorRole": "ProcurementOfficer",
+        "action": "DraftCreated",
+        "comments": "Purchase order draft prepared.",
+        "timestampUtc": "2026-02-15T09:00:00Z"
+      },
+      {
+        "id": "PO-HIS-02",
+        "poId": "PO-2026-0001",
+        "actorUserId": "USR-PROC-05",
+        "actorName": "Samantha Lee",
+        "actorRole": "ProcurementOfficer",
+        "action": "Submitted",
+        "comments": "Submitted for Project Manager review.",
+        "timestampUtc": "2026-02-15T10:30:00Z"
+      },
+      {
+        "id": "PO-HIS-03",
+        "poId": "PO-2026-0001",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved against Q1 construction budget.",
+        "timestampUtc": "2026-02-15T14:00:00Z"
+      },
+      {
+        "id": "PO-HIS-04",
+        "poId": "PO-2026-0001",
+        "actorUserId": "USR-PROC-05",
+        "actorName": "Samantha Lee",
+        "actorRole": "ProcurementOfficer",
+        "action": "Issued",
+        "comments": "Purchase order contract dispatched to Apex Structural Steel Ltd.",
+        "timestampUtc": "2026-02-16T08:30:00Z"
+      }
+    ],
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-02-15T14:00:00Z",
+    "issuedByUserId": "USR-PROC-05",
+    "issuedByName": "Samantha Lee",
+    "issuedAtUtc": "2026-02-16T08:30:00Z",
+    "createdAtUtc": "2026-02-15T09:00:00Z",
+    "updatedAtUtc": "2026-02-16T08:30:00Z",
+    "createdByUserId": "USR-PROC-05",
+    "createdByName": "Samantha Lee"
+  }
+]

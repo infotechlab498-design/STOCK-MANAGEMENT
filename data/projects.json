@@ -1,0 +1,35 @@
+[
+  {
+    "id": "PRJ-101",
+    "code": "PRJ-METRO",
+    "name": "Metro Rail Line 3 Extension",
+    "location": "North Industrial Sector, Corridor B",
+    "projectManagerId": "USR-PM-03",
+    "projectManagerName": "David Sterling",
+    "isActive": true,
+    "startDate": "2026-01-10",
+    "targetCompletionDate": "2027-12-31"
+  },
+  {
+    "id": "PRJ-102",
+    "code": "PRJ-HARBOR",
+    "name": "Harbor Commercial Docklands",
+    "location": "East Waterfront District, Berth 4",
+    "projectManagerId": "USR-ADMIN-01",
+    "projectManagerName": "Alexander Vance",
+    "isActive": true,
+    "startDate": "2026-02-01",
+    "targetCompletionDate": "2028-06-30"
+  },
+  {
+    "id": "PRJ-103",
+    "code": "PRJ-TOWER",
+    "name": "Skyline Corporate Towers",
+    "location": "Central Business District, Plot 12",
+    "projectManagerId": "USR-ADMIN-01",
+    "projectManagerName": "Alexander Vance",
+    "isActive": true,
+    "startDate": "2025-11-15",
+    "targetCompletionDate": "2027-08-31"
+  }
+]

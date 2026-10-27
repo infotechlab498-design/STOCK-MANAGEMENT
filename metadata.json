@@ -1,0 +1,6 @@
+{
+  "name": "Construction Stock Management System",
+  "description": "Enterprise multi-project construction inventory and stock management system with weighted-average valuation, material requisition, GRNs, transfers, and ledger tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
