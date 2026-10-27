@@ -10,6 +10,15 @@ import { RequisitionListPage } from '../pages/RequisitionListPage';
 import { RequisitionDetailPage } from '../pages/RequisitionDetailPage';
 import { RequisitionFormPage } from '../pages/RequisitionFormPage';
 import { ApprovalInboxPage } from '../pages/ApprovalInboxPage';
+import { SupplierListPage } from '../pages/SupplierListPage';
+import { SupplierDetailPage } from '../pages/SupplierDetailPage';
+import { PurchaseOrderListPage } from '../pages/PurchaseOrderListPage';
+import { PurchaseOrderFormPage } from '../pages/PurchaseOrderFormPage';
+import { PurchaseOrderDetailPage } from '../pages/PurchaseOrderDetailPage';
+import { RateComparisonPage } from '../pages/RateComparisonPage';
+import { GrnListPage } from '../pages/GrnListPage';
+import { CreateGrnPage } from '../pages/CreateGrnPage';
+import { GrnDetailPage } from '../pages/GrnDetailPage';
 import { ModulePlaceholderPage } from '../pages/ModulePlaceholderPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { LoadingSpinner } from '../components/common/EmptyState';
@@ -138,17 +147,16 @@ export const AppRoutes: React.FC = () => {
         path="/suppliers"
         element={
           <ProtectedRoute>
-            <ModulePlaceholderPage
-              moduleName="Suppliers Registry"
-              category="Master Data"
-              description="Approved vendors, commercial terms, delivery agreements, and quality performance ratings."
-              targetPrompt="Prompt 2"
-              businessCapabilities={[
-                'Vendor profile and tax registration compliance',
-                'Approved material supply categories',
-                'Delivery lead time performance history',
-              ]}
-            />
+            <SupplierListPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/suppliers/:id"
+        element={
+          <ProtectedRoute>
+            <SupplierDetailPage />
           </ProtectedRoute>
         }
       />
@@ -237,22 +245,57 @@ export const AppRoutes: React.FC = () => {
         }
       />
 
-      {/* Procurement */}
+      {/* Procurement & Purchase Orders */}
       <Route
         path="/purchase-orders"
         element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager']}>
+            <PurchaseOrderListPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/purchase-orders/new"
+        element={
           <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']}>
-            <ModulePlaceholderPage
-              moduleName="Purchase Orders (PO)"
-              category="Procurement"
-              description="Commercial contracts generated against approved material requisitions."
-              targetPrompt="Prompt 5"
-              businessCapabilities={[
-                'Contract generation with agreed supplier pricing',
-                'Staggered delivery schedules',
-                'Integration with Goods Received Notes',
-              ]}
-            />
+            <PurchaseOrderFormPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/purchase-orders/:id"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager']}>
+            <PurchaseOrderDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/purchase-orders/:id/edit"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']}>
+            <PurchaseOrderFormPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/purchase-orders/rate-comparison"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager']}>
+            <RateComparisonPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/quotations"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager']}>
+            <RateComparisonPage />
           </ProtectedRoute>
         }
       />
@@ -276,22 +319,39 @@ export const AppRoutes: React.FC = () => {
         }
       />
 
-      {/* Goods Receiving */}
+      {/* Goods Receiving & Quality Inspection */}
       <Route
         path="/grns"
         element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer', 'ProjectManager']}>
+            <GrnListPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/grns/new"
+        element={
           <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer']}>
-            <ModulePlaceholderPage
-              moduleName="Goods Received Notes (GRN)"
-              category="Goods Receiving"
-              description="Delivery inspection, physical tally verification, and atomic weighted-average stock posting."
-              targetPrompt="Prompt 5"
-              businessCapabilities={[
-                'GRN receipt against Purchase Orders',
-                'Physical delivery quantity and QA sign-off',
-                'Atomic weighted-average cost (WAC) recalculation',
-              ]}
-            />
+            <CreateGrnPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/grns/:id"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer', 'ProjectManager']}>
+            <GrnDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/grns/:id/edit"
+        element={
+          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer']}>
+            <CreateGrnPage />
           </ProtectedRoute>
         }
       />

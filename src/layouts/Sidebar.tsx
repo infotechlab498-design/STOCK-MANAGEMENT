@@ -129,17 +129,20 @@ export const Sidebar: React.FC = () => {
       icon: <FileCheck size={18} />,
       items: [
         { to: '/purchase-orders', label: 'Purchase Orders (PO)' },
+        { to: '/purchase-orders/rate-comparison', label: 'Rate Comparison' },
         { to: '/pending-deliveries', label: 'Pending Deliveries' },
       ],
-      allowedRoles: ['SuperAdmin', 'InventoryManager', 'ProcurementOfficer'],
+      allowedRoles: ['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager'],
     },
     {
       id: 'receiving',
       title: 'Goods Receiving',
       icon: <Truck size={18} />,
-      to: '/grns',
-      badge: 'GRN',
-      allowedRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer'],
+      items: [
+        { to: '/grns', label: 'Goods Received Notes' },
+        { to: '/grns/new', label: 'New Goods Receipt', allowedRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer'] },
+      ],
+      allowedRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer', 'ProjectManager'],
     },
     {
       id: 'inventory',

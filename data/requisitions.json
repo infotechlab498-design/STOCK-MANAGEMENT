@@ -478,5 +478,1259 @@
     "approvedByUserId": "USR-PM-03",
     "approvedByName": "David Sterling",
     "approvedAtUtc": "2026-10-27T13:36:06.350Z"
+  },
+  {
+    "id": "REQ-mvqsv9ve-5a93fd",
+    "requisitionNumber": "MR-2026-0007",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-1a41223b",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-bcb37094",
+        "requisitionId": "REQ-mvqsv9ve-5a93fd",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T14:47:51.482Z"
+      },
+      {
+        "id": "HIS-8019f0e3",
+        "requisitionId": "REQ-mvqsv9ve-5a93fd",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T14:47:51.487Z"
+      },
+      {
+        "id": "HIS-0bddb42f",
+        "requisitionId": "REQ-mvqsv9ve-5a93fd",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T14:47:51.493Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T14:47:51.482Z",
+    "updatedAtUtc": "2026-10-27T14:47:51.493Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T14:47:51.493Z"
+  },
+  {
+    "id": "REQ-mvqsvvq2-28c5b7",
+    "requisitionNumber": "MR-2026-0008",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-095a89de",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-76ca91ed",
+        "requisitionId": "REQ-mvqsvvq2-28c5b7",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T14:48:19.802Z"
+      },
+      {
+        "id": "HIS-95f64dcb",
+        "requisitionId": "REQ-mvqsvvq2-28c5b7",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T14:48:19.805Z"
+      },
+      {
+        "id": "HIS-3ef75039",
+        "requisitionId": "REQ-mvqsvvq2-28c5b7",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T14:48:19.810Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T14:48:19.802Z",
+    "updatedAtUtc": "2026-10-27T14:48:19.810Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T14:48:19.810Z"
+  },
+  {
+    "id": "REQ-mvqswwdx-b0887b",
+    "requisitionNumber": "MR-2026-0009",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-6fcb4da4",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-9f590ab1",
+        "requisitionId": "REQ-mvqswwdx-b0887b",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T14:49:07.317Z"
+      },
+      {
+        "id": "HIS-5e267c68",
+        "requisitionId": "REQ-mvqswwdx-b0887b",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T14:49:07.319Z"
+      },
+      {
+        "id": "HIS-ab0a5fdb",
+        "requisitionId": "REQ-mvqswwdx-b0887b",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T14:49:07.324Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T14:49:07.317Z",
+    "updatedAtUtc": "2026-10-27T14:49:07.324Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T14:49:07.324Z"
+  },
+  {
+    "id": "REQ-mvqsxvrc-b7581c",
+    "requisitionNumber": "MR-2026-0010",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-25",
+    "priority": "High",
+    "purpose": "Guideway pier cap reinforcement steel cage fabrication.",
+    "workActivity": "Pier Cap Structural Pour",
+    "siteLocationDetail": "Pier 22-26, North Staging Yard",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-784ae005",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 8,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "Adjusted to weekly phase limit per PM instruction",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-7dd26af3",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 100,
+        "unitId": "UNT-BAG",
+        "unitCode": "Bag (50kg standard)",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-76cedf7f",
+        "requisitionId": "REQ-mvqsxvrc-b7581c",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T14:49:53.160Z"
+      },
+      {
+        "id": "HIS-c8f91ce0",
+        "requisitionId": "REQ-mvqsxvrc-b7581c",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for PM review before fabrication.",
+        "timestampUtc": "2026-10-27T14:49:53.167Z"
+      },
+      {
+        "id": "HIS-ef01fbc7",
+        "requisitionId": "REQ-mvqsxvrc-b7581c",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Reduce rebar quantity from 12.5 MT to 8.0 MT to align with weekly pouring cycle.",
+        "timestampUtc": "2026-10-27T14:49:53.179Z"
+      },
+      {
+        "id": "HIS-44541bc8",
+        "requisitionId": "REQ-mvqsxvrc-b7581c",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Updated",
+        "comments": "Adjusted rebar quantity to 8.0 MT.",
+        "timestampUtc": "2026-10-27T14:49:53.183Z"
+      },
+      {
+        "id": "HIS-e7facf40",
+        "requisitionId": "REQ-mvqsxvrc-b7581c",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Resubmitting with reduced rebar quantity.",
+        "timestampUtc": "2026-10-27T14:49:53.186Z"
+      },
+      {
+        "id": "HIS-e44ef8e3",
+        "requisitionId": "REQ-mvqsxvrc-b7581c",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Adjusted quantities verified against site schedule.",
+        "timestampUtc": "2026-10-27T14:49:53.188Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T14:49:53.160Z",
+    "updatedAtUtc": "2026-10-27T14:49:53.188Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T14:49:53.188Z"
+  },
+  {
+    "id": "REQ-mvqsy0o5-3f8aaf",
+    "requisitionNumber": "MR-2026-0011",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-b24c2657",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-bca63225",
+        "requisitionId": "REQ-mvqsy0o5-3f8aaf",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T14:49:59.525Z"
+      },
+      {
+        "id": "HIS-119251cc",
+        "requisitionId": "REQ-mvqsy0o5-3f8aaf",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T14:49:59.527Z"
+      },
+      {
+        "id": "HIS-126298d8",
+        "requisitionId": "REQ-mvqsy0o5-3f8aaf",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T14:49:59.531Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T14:49:59.525Z",
+    "updatedAtUtc": "2026-10-27T14:49:59.531Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T14:49:59.531Z"
+  },
+  {
+    "id": "REQ-mvqtxd4g-99a7bb",
+    "requisitionNumber": "MR-2026-0012",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-25",
+    "priority": "High",
+    "purpose": "Guideway pier cap reinforcement steel cage fabrication.",
+    "workActivity": "Pier Cap Structural Pour",
+    "siteLocationDetail": "Pier 22-26, North Staging Yard",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-af27a4d7",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 8,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "Adjusted to weekly phase limit per PM instruction",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-621d3341",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 100,
+        "unitId": "UNT-BAG",
+        "unitCode": "Bag (50kg standard)",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-b9e23fc8",
+        "requisitionId": "REQ-mvqtxd4g-99a7bb",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T15:17:28.624Z"
+      },
+      {
+        "id": "HIS-0e3f7198",
+        "requisitionId": "REQ-mvqtxd4g-99a7bb",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for PM review before fabrication.",
+        "timestampUtc": "2026-10-27T15:17:28.629Z"
+      },
+      {
+        "id": "HIS-9b0e08e6",
+        "requisitionId": "REQ-mvqtxd4g-99a7bb",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Reduce rebar quantity from 12.5 MT to 8.0 MT to align with weekly pouring cycle.",
+        "timestampUtc": "2026-10-27T15:17:28.641Z"
+      },
+      {
+        "id": "HIS-223d0153",
+        "requisitionId": "REQ-mvqtxd4g-99a7bb",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Updated",
+        "comments": "Adjusted rebar quantity to 8.0 MT.",
+        "timestampUtc": "2026-10-27T15:17:28.644Z"
+      },
+      {
+        "id": "HIS-803de47f",
+        "requisitionId": "REQ-mvqtxd4g-99a7bb",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Resubmitting with reduced rebar quantity.",
+        "timestampUtc": "2026-10-27T15:17:28.646Z"
+      },
+      {
+        "id": "HIS-95f73f89",
+        "requisitionId": "REQ-mvqtxd4g-99a7bb",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Adjusted quantities verified against site schedule.",
+        "timestampUtc": "2026-10-27T15:17:28.649Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:17:28.624Z",
+    "updatedAtUtc": "2026-10-27T15:17:28.649Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T15:17:28.649Z"
+  },
+  {
+    "id": "REQ-mvqtxe3p-2f4680",
+    "requisitionNumber": "MR-2026-0013",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-151c28d1",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-a9996723",
+        "requisitionId": "REQ-mvqtxe3p-2f4680",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T15:17:29.893Z"
+      },
+      {
+        "id": "HIS-1782e0c1",
+        "requisitionId": "REQ-mvqtxe3p-2f4680",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T15:17:29.895Z"
+      },
+      {
+        "id": "HIS-cd6da031",
+        "requisitionId": "REQ-mvqtxe3p-2f4680",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T15:17:29.900Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:17:29.893Z",
+    "updatedAtUtc": "2026-10-27T15:17:29.900Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T15:17:29.900Z"
+  },
+  {
+    "id": "REQ-mvqurclc-6e51cf",
+    "requisitionNumber": "MR-2026-0014",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-25",
+    "priority": "High",
+    "purpose": "Guideway pier cap reinforcement steel cage fabrication.",
+    "workActivity": "Pier Cap Structural Pour",
+    "siteLocationDetail": "Pier 22-26, North Staging Yard",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-1b783dd3",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 8,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "Adjusted to weekly phase limit per PM instruction",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-c2979a6c",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 100,
+        "unitId": "UNT-BAG",
+        "unitCode": "Bag (50kg standard)",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-0c17df89",
+        "requisitionId": "REQ-mvqurclc-6e51cf",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T15:40:47.616Z"
+      },
+      {
+        "id": "HIS-b64fa095",
+        "requisitionId": "REQ-mvqurclc-6e51cf",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for PM review before fabrication.",
+        "timestampUtc": "2026-10-27T15:40:47.623Z"
+      },
+      {
+        "id": "HIS-f92377b1",
+        "requisitionId": "REQ-mvqurclc-6e51cf",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Reduce rebar quantity from 12.5 MT to 8.0 MT to align with weekly pouring cycle.",
+        "timestampUtc": "2026-10-27T15:40:47.635Z"
+      },
+      {
+        "id": "HIS-f58cdb69",
+        "requisitionId": "REQ-mvqurclc-6e51cf",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Updated",
+        "comments": "Adjusted rebar quantity to 8.0 MT.",
+        "timestampUtc": "2026-10-27T15:40:47.638Z"
+      },
+      {
+        "id": "HIS-55e698f7",
+        "requisitionId": "REQ-mvqurclc-6e51cf",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Resubmitting with reduced rebar quantity.",
+        "timestampUtc": "2026-10-27T15:40:47.640Z"
+      },
+      {
+        "id": "HIS-c3807da1",
+        "requisitionId": "REQ-mvqurclc-6e51cf",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Adjusted quantities verified against site schedule.",
+        "timestampUtc": "2026-10-27T15:40:47.643Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:40:47.616Z",
+    "updatedAtUtc": "2026-10-27T15:40:47.643Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T15:40:47.643Z"
+  },
+  {
+    "id": "REQ-mvqurdjf-4df6cf",
+    "requisitionNumber": "MR-2026-0015",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-2089314b",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-895d8fdc",
+        "requisitionId": "REQ-mvqurdjf-4df6cf",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T15:40:48.843Z"
+      },
+      {
+        "id": "HIS-cfc7502a",
+        "requisitionId": "REQ-mvqurdjf-4df6cf",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T15:40:48.845Z"
+      },
+      {
+        "id": "HIS-c288e1ad",
+        "requisitionId": "REQ-mvqurdjf-4df6cf",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T15:40:48.851Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:40:48.843Z",
+    "updatedAtUtc": "2026-10-27T15:40:48.851Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T15:40:48.851Z"
+  },
+  {
+    "id": "REQ-mvquuzjr-374621",
+    "requisitionNumber": "MR-2026-0016",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-25",
+    "priority": "High",
+    "purpose": "Guideway pier cap reinforcement steel cage fabrication.",
+    "workActivity": "Pier Cap Structural Pour",
+    "siteLocationDetail": "Pier 22-26, North Staging Yard",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-c8f7358c",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 8,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "Adjusted to weekly phase limit per PM instruction",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-d40481ee",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 100,
+        "unitId": "UNT-BAG",
+        "unitCode": "Bag (50kg standard)",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-ef4fd31e",
+        "requisitionId": "REQ-mvquuzjr-374621",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T15:43:37.335Z"
+      },
+      {
+        "id": "HIS-eaa8a587",
+        "requisitionId": "REQ-mvquuzjr-374621",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for PM review before fabrication.",
+        "timestampUtc": "2026-10-27T15:43:37.342Z"
+      },
+      {
+        "id": "HIS-2051115d",
+        "requisitionId": "REQ-mvquuzjr-374621",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Reduce rebar quantity from 12.5 MT to 8.0 MT to align with weekly pouring cycle.",
+        "timestampUtc": "2026-10-27T15:43:37.355Z"
+      },
+      {
+        "id": "HIS-5bb36649",
+        "requisitionId": "REQ-mvquuzjr-374621",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Updated",
+        "comments": "Adjusted rebar quantity to 8.0 MT.",
+        "timestampUtc": "2026-10-27T15:43:37.358Z"
+      },
+      {
+        "id": "HIS-678c4305",
+        "requisitionId": "REQ-mvquuzjr-374621",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Resubmitting with reduced rebar quantity.",
+        "timestampUtc": "2026-10-27T15:43:37.361Z"
+      },
+      {
+        "id": "HIS-b99fded6",
+        "requisitionId": "REQ-mvquuzjr-374621",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Adjusted quantities verified against site schedule.",
+        "timestampUtc": "2026-10-27T15:43:37.365Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:43:37.335Z",
+    "updatedAtUtc": "2026-10-27T15:43:37.365Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T15:43:37.365Z"
+  },
+  {
+    "id": "REQ-mvquv0t2-45413e",
+    "requisitionNumber": "MR-2026-0017",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-a1fc8095",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-b4682acf",
+        "requisitionId": "REQ-mvquv0t2-45413e",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T15:43:38.966Z"
+      },
+      {
+        "id": "HIS-36d73dec",
+        "requisitionId": "REQ-mvquv0t2-45413e",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T15:43:38.969Z"
+      },
+      {
+        "id": "HIS-04001669",
+        "requisitionId": "REQ-mvquv0t2-45413e",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T15:43:38.977Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:43:38.966Z",
+    "updatedAtUtc": "2026-10-27T15:43:38.977Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T15:43:38.977Z"
+  },
+  {
+    "id": "REQ-mvqv0jv6-aff340",
+    "requisitionNumber": "MR-2026-0018",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-25",
+    "priority": "High",
+    "purpose": "Guideway pier cap reinforcement steel cage fabrication.",
+    "workActivity": "Pier Cap Structural Pour",
+    "siteLocationDetail": "Pier 22-26, North Staging Yard",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-ba1e5dbd",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 8,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "Adjusted to weekly phase limit per PM instruction",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-4e60295c",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 100,
+        "unitId": "UNT-BAG",
+        "unitCode": "Bag (50kg standard)",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-782557ee",
+        "requisitionId": "REQ-mvqv0jv6-aff340",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T15:47:56.946Z"
+      },
+      {
+        "id": "HIS-dff2bc67",
+        "requisitionId": "REQ-mvqv0jv6-aff340",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for PM review before fabrication.",
+        "timestampUtc": "2026-10-27T15:47:56.951Z"
+      },
+      {
+        "id": "HIS-b66a3a5f",
+        "requisitionId": "REQ-mvqv0jv6-aff340",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Reduce rebar quantity from 12.5 MT to 8.0 MT to align with weekly pouring cycle.",
+        "timestampUtc": "2026-10-27T15:47:56.960Z"
+      },
+      {
+        "id": "HIS-dcdedd3b",
+        "requisitionId": "REQ-mvqv0jv6-aff340",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Updated",
+        "comments": "Adjusted rebar quantity to 8.0 MT.",
+        "timestampUtc": "2026-10-27T15:47:56.962Z"
+      },
+      {
+        "id": "HIS-5299512d",
+        "requisitionId": "REQ-mvqv0jv6-aff340",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Resubmitting with reduced rebar quantity.",
+        "timestampUtc": "2026-10-27T15:47:56.965Z"
+      },
+      {
+        "id": "HIS-94687335",
+        "requisitionId": "REQ-mvqv0jv6-aff340",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Adjusted quantities verified against site schedule.",
+        "timestampUtc": "2026-10-27T15:47:56.967Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:47:56.946Z",
+    "updatedAtUtc": "2026-10-27T15:47:56.967Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T15:47:56.967Z"
+  },
+  {
+    "id": "REQ-mvqv0kq9-7cfbd6",
+    "requisitionNumber": "MR-2026-0019",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-c8603efd",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-7f5e0cb7",
+        "requisitionId": "REQ-mvqv0kq9-7cfbd6",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T15:47:58.065Z"
+      },
+      {
+        "id": "HIS-2f3522d4",
+        "requisitionId": "REQ-mvqv0kq9-7cfbd6",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T15:47:58.068Z"
+      },
+      {
+        "id": "HIS-ef44809e",
+        "requisitionId": "REQ-mvqv0kq9-7cfbd6",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T15:47:58.073Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:47:58.065Z",
+    "updatedAtUtc": "2026-10-27T15:47:58.073Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T15:47:58.073Z"
+  },
+  {
+    "id": "REQ-mvqvvlt2-48c618",
+    "requisitionNumber": "MR-2026-0020",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-STR-04",
+    "requesterName": "Marcus Vance",
+    "requesterRole": "Storekeeper",
+    "requiredDate": "2026-11-25",
+    "priority": "High",
+    "purpose": "Guideway pier cap reinforcement steel cage fabrication.",
+    "workActivity": "Pier Cap Structural Pour",
+    "siteLocationDetail": "Pier 22-26, North Staging Yard",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-e07553c7",
+        "materialId": "MAT-STEEL-01",
+        "materialCode": "STEEL-REBAR-T16",
+        "materialName": "High-Tensile Deformed Rebar 16mm",
+        "categoryId": "CAT-STEEL",
+        "categoryName": "Structural Steel & Rebar",
+        "requestedQuantity": 8,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "Adjusted to weekly phase limit per PM instruction",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      },
+      {
+        "id": "RQI-f8170720",
+        "materialId": "MAT-CEM-02",
+        "materialCode": "CEM-OPC-50KG",
+        "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
+        "categoryId": "CAT-CEMENT",
+        "categoryName": "Cement & Binders",
+        "requestedQuantity": 100,
+        "unitId": "UNT-BAG",
+        "unitCode": "Bag (50kg standard)",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-5e8d9d15",
+        "requisitionId": "REQ-mvqvvlt2-48c618",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T16:12:05.798Z"
+      },
+      {
+        "id": "HIS-d38a6401",
+        "requisitionId": "REQ-mvqvvlt2-48c618",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Submitted for PM review before fabrication.",
+        "timestampUtc": "2026-10-27T16:12:05.811Z"
+      },
+      {
+        "id": "HIS-3d75f7b7",
+        "requisitionId": "REQ-mvqvvlt2-48c618",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "ReturnedForCorrection",
+        "comments": "Reduce rebar quantity from 12.5 MT to 8.0 MT to align with weekly pouring cycle.",
+        "timestampUtc": "2026-10-27T16:12:05.834Z"
+      },
+      {
+        "id": "HIS-2f8ea998",
+        "requisitionId": "REQ-mvqvvlt2-48c618",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Updated",
+        "comments": "Adjusted rebar quantity to 8.0 MT.",
+        "timestampUtc": "2026-10-27T16:12:05.838Z"
+      },
+      {
+        "id": "HIS-4a86455f",
+        "requisitionId": "REQ-mvqvvlt2-48c618",
+        "actorUserId": "USR-STR-04",
+        "actorName": "Marcus Vance",
+        "actorRole": "Storekeeper",
+        "action": "Submitted",
+        "comments": "Resubmitting with reduced rebar quantity.",
+        "timestampUtc": "2026-10-27T16:12:05.840Z"
+      },
+      {
+        "id": "HIS-85323995",
+        "requisitionId": "REQ-mvqvvlt2-48c618",
+        "actorUserId": "USR-PM-03",
+        "actorName": "David Sterling",
+        "actorRole": "ProjectManager",
+        "action": "Approved",
+        "comments": "Approved. Adjusted quantities verified against site schedule.",
+        "timestampUtc": "2026-10-27T16:12:05.843Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T16:12:05.798Z",
+    "updatedAtUtc": "2026-10-27T16:12:05.843Z",
+    "approvedByUserId": "USR-PM-03",
+    "approvedByName": "David Sterling",
+    "approvedAtUtc": "2026-10-27T16:12:05.843Z"
+  },
+  {
+    "id": "REQ-mvqvvmte-228f04",
+    "requisitionNumber": "MR-2026-0021",
+    "projectId": "PRJ-101",
+    "projectCode": "PRJ-METRO",
+    "projectName": "Metro Rail Line 3 Extension",
+    "requesterUserId": "USR-ADMIN-01",
+    "requesterName": "Alexander Vance",
+    "requesterRole": "SuperAdmin",
+    "requiredDate": "2026-11-20",
+    "priority": "High",
+    "purpose": "Foundation structural work allocation test",
+    "status": "Approved",
+    "items": [
+      {
+        "id": "RQI-4192a972",
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "categoryId": "CAT-CRUSH",
+        "categoryName": "Crushed Aggregates & Gravel",
+        "requestedQuantity": 100,
+        "unitId": "UNT-MT",
+        "unitCode": "Metric Tonne",
+        "remarks": "High tensile rebar batch A",
+        "stockAvailabilityNote": "Not yet connected (Future Integration Point)"
+      }
+    ],
+    "approvalHistory": [
+      {
+        "id": "HIS-4827a4e8",
+        "requisitionId": "REQ-mvqvvmte-228f04",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "DraftCreated",
+        "comments": "Requisition draft created.",
+        "timestampUtc": "2026-10-27T16:12:07.106Z"
+      },
+      {
+        "id": "HIS-ede2163f",
+        "requisitionId": "REQ-mvqvvmte-228f04",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Submitted",
+        "comments": "Submitting for test",
+        "timestampUtc": "2026-10-27T16:12:07.110Z"
+      },
+      {
+        "id": "HIS-ead548e7",
+        "requisitionId": "REQ-mvqvvmte-228f04",
+        "actorUserId": "USR-ADMIN-01",
+        "actorName": "Alexander Vance",
+        "actorRole": "SuperAdmin",
+        "action": "Approved",
+        "comments": "Approved for procurement test",
+        "timestampUtc": "2026-10-27T16:12:07.116Z"
+      }
+    ],
+    "createdAtUtc": "2026-10-27T16:12:07.106Z",
+    "updatedAtUtc": "2026-10-27T16:12:07.116Z",
+    "approvedByUserId": "USR-ADMIN-01",
+    "approvedByName": "Alexander Vance",
+    "approvedAtUtc": "2026-10-27T16:12:07.116Z"
   }
 ]

@@ -16,11 +16,11 @@
         "materialName": "High-Tensile Deformed Rebar 16mm",
         "unitCode": "Metric Tonne",
         "quotedQuantity": 20,
-        "unitRate": 780.0,
+        "unitRate": 780,
         "discount": 0,
-        "taxRate": 5.0,
-        "estimatedFreight": 250.0,
-        "lineTotal": 16380.0
+        "taxRate": 5,
+        "estimatedFreight": 250,
+        "lineTotal": 16380
       }
     ],
     "createdAtUtc": "2026-02-10T10:00:00Z"
@@ -42,11 +42,11 @@
         "materialName": "Ordinary Portland Cement (CEM I 42.5N)",
         "unitCode": "Bag (50kg standard)",
         "quotedQuantity": 500,
-        "unitRate": 9.20,
-        "discount": 0.20,
-        "taxRate": 5.0,
-        "estimatedFreight": 150.0,
-        "lineTotal": 4725.0
+        "unitRate": 9.2,
+        "discount": 0.2,
+        "taxRate": 5,
+        "estimatedFreight": 150,
+        "lineTotal": 4725
       },
       {
         "materialId": "MAT-AGG-03",
@@ -54,13 +54,213 @@
         "materialName": "Crushed Coarse Aggregate 20mm",
         "unitCode": "Metric Tonne",
         "quotedQuantity": 50,
-        "unitRate": 34.0,
+        "unitRate": 34,
         "discount": 0,
-        "taxRate": 5.0,
-        "estimatedFreight": 200.0,
-        "lineTotal": 1785.0
+        "taxRate": 5,
+        "estimatedFreight": 200,
+        "lineTotal": 1785
       }
     ],
     "createdAtUtc": "2026-02-11T11:00:00Z"
+  },
+  {
+    "id": "QT-MVQSVVRJ",
+    "quotationReference": "RFQ-TEST-9854",
+    "supplierId": "SUP-MVQSVVP7",
+    "supplierName": "Titan Heavy Industries International",
+    "date": "2026-10-27",
+    "validUntil": "2026-11-26",
+    "currency": "USD",
+    "paymentTerms": "Net 60 Days",
+    "items": [
+      {
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 100,
+        "unitRate": 88,
+        "discount": 0,
+        "taxRate": 5,
+        "estimatedFreight": 0,
+        "lineTotal": 9240
+      }
+    ],
+    "createdAtUtc": "2026-10-27T14:48:19.855Z"
+  },
+  {
+    "id": "QT-MVQSWWF4",
+    "quotationReference": "RFQ-TEST-7359",
+    "supplierId": "SUP-MVQSWWD3",
+    "supplierName": "Titan Heavy Industries International",
+    "date": "2026-10-27",
+    "validUntil": "2026-11-26",
+    "currency": "USD",
+    "paymentTerms": "Net 60 Days",
+    "items": [
+      {
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 100,
+        "unitRate": 88,
+        "discount": 0,
+        "taxRate": 5,
+        "estimatedFreight": 0,
+        "lineTotal": 9240
+      }
+    ],
+    "createdAtUtc": "2026-10-27T14:49:07.360Z"
+  },
+  {
+    "id": "QT-MVQSY0PF",
+    "quotationReference": "RFQ-TEST-9569",
+    "supplierId": "SUP-MVQSY0NH",
+    "supplierName": "Titan Heavy Industries International",
+    "date": "2026-10-27",
+    "validUntil": "2026-11-26",
+    "currency": "USD",
+    "paymentTerms": "Net 60 Days",
+    "items": [
+      {
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 100,
+        "unitRate": 88,
+        "discount": 0,
+        "taxRate": 5,
+        "estimatedFreight": 0,
+        "lineTotal": 9240
+      }
+    ],
+    "createdAtUtc": "2026-10-27T14:49:59.571Z"
+  },
+  {
+    "id": "QT-MVQTXE50",
+    "quotationReference": "RFQ-TEST-9938",
+    "supplierId": "SUP-MVQTXE2Y",
+    "supplierName": "Titan Heavy Industries International",
+    "date": "2026-10-27",
+    "validUntil": "2026-11-26",
+    "currency": "USD",
+    "paymentTerms": "Net 60 Days",
+    "items": [
+      {
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 100,
+        "unitRate": 88,
+        "discount": 0,
+        "taxRate": 5,
+        "estimatedFreight": 0,
+        "lineTotal": 9240
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:17:29.940Z"
+  },
+  {
+    "id": "QT-MVQURDKX",
+    "quotationReference": "RFQ-TEST-8896",
+    "supplierId": "SUP-MVQURDIP",
+    "supplierName": "Titan Heavy Industries International",
+    "date": "2026-10-27",
+    "validUntil": "2026-11-26",
+    "currency": "USD",
+    "paymentTerms": "Net 60 Days",
+    "items": [
+      {
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 100,
+        "unitRate": 88,
+        "discount": 0,
+        "taxRate": 5,
+        "estimatedFreight": 0,
+        "lineTotal": 9240
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:40:48.897Z"
+  },
+  {
+    "id": "QT-MVQUV0VH",
+    "quotationReference": "RFQ-TEST-9051",
+    "supplierId": "SUP-MVQUV0RX",
+    "supplierName": "Titan Heavy Industries International",
+    "date": "2026-10-27",
+    "validUntil": "2026-11-26",
+    "currency": "USD",
+    "paymentTerms": "Net 60 Days",
+    "items": [
+      {
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 100,
+        "unitRate": 88,
+        "discount": 0,
+        "taxRate": 5,
+        "estimatedFreight": 0,
+        "lineTotal": 9240
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:43:39.053Z"
+  },
+  {
+    "id": "QT-MVQV0KRT",
+    "quotationReference": "RFQ-TEST-8120",
+    "supplierId": "SUP-MVQV0KPL",
+    "supplierName": "Titan Heavy Industries International",
+    "date": "2026-10-27",
+    "validUntil": "2026-11-26",
+    "currency": "USD",
+    "paymentTerms": "Net 60 Days",
+    "items": [
+      {
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 100,
+        "unitRate": 88,
+        "discount": 0,
+        "taxRate": 5,
+        "estimatedFreight": 0,
+        "lineTotal": 9240
+      }
+    ],
+    "createdAtUtc": "2026-10-27T15:47:58.121Z"
+  },
+  {
+    "id": "QT-MVQVVMVB",
+    "quotationReference": "RFQ-TEST-7173",
+    "supplierId": "SUP-MVQVVMSK",
+    "supplierName": "Titan Heavy Industries International",
+    "date": "2026-10-27",
+    "validUntil": "2026-11-26",
+    "currency": "USD",
+    "paymentTerms": "Net 60 Days",
+    "items": [
+      {
+        "materialId": "MAT-AGG-03",
+        "materialCode": "AGG-CRUSH-20MM",
+        "materialName": "Crushed Coarse Aggregate 20mm",
+        "unitCode": "Metric Tonne",
+        "quotedQuantity": 100,
+        "unitRate": 88,
+        "discount": 0,
+        "taxRate": 5,
+        "estimatedFreight": 0,
+        "lineTotal": 9240
+      }
+    ],
+    "createdAtUtc": "2026-10-27T16:12:07.175Z"
   }
 ]

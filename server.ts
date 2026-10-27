@@ -1394,6 +1394,25 @@ function setupApiRoutes(router: express.Router) {
     return false;
   }
 
+  function canUserAccessWarehouse(user: JwtPayload, warehouseId: string): boolean {
+    if (user.roles.includes('SuperAdmin') || user.roles.includes('InventoryManager') || user.roles.includes('AccountsOfficer')) {
+      return true;
+    }
+    if (user.warehouseScopes.includes('*') || user.warehouseScopes.includes(warehouseId)) {
+      return true;
+    }
+    return false;
+  }
+
+  function canUserAccessLocation(user: JwtPayload, projectId?: string, warehouseId?: string): boolean {
+    if (user.roles.includes('SuperAdmin') || user.roles.includes('InventoryManager') || user.roles.includes('AccountsOfficer')) {
+      return true;
+    }
+    const hasProject = !projectId || canUserAccessProject(user, projectId);
+    const hasWarehouse = !warehouseId || canUserAccessWarehouse(user, warehouseId);
+    return hasProject && hasWarehouse;
+  }
+
   function generateNextRequisitionNumber(requisitions: RequisitionRecord[]): string {
     const currentYear = new Date().getFullYear();
     const prefix = `MR-${currentYear}-`;
@@ -2107,6 +2126,3745 @@ function setupApiRoutes(router: express.Router) {
       timestampUtc: new Date().toISOString(),
     });
   });
+
+  // ========================================================================
+  // SUPPLIER MANAGEMENT, PURCHASE ORDERS & QUOTATION MODULE (PROMPT 7)
+  // ========================================================================
+
+  interface SupplierRecord {
+    id: string;
+    supplierCode: string;
+    normalizedSupplierCode: string;
+    name: string;
+    contactPerson: string;
+    phone: string;
+    email: string;
+    address: string;
+    taxReference?: string;
+    paymentTerms?: string;
+    notes?: string;
+    isActive: boolean;
+    createdAtUtc: string;
+    updatedAtUtc?: string;
+    createdByUserId?: string;
+    updatedByUserId?: string;
+  }
+
+  type PurchaseOrderStatus =
+    | 'Draft'
+    | 'PendingApproval'
+    | 'Approved'
+    | 'Issued'
+    | 'PartiallyReceived'
+    | 'FullyReceived'
+    | 'Cancelled'
+    | 'Rejected';
+
+  interface PurchaseOrderItemRecord {
+    id: string;
+    parentPoId: string;
+    materialId: string;
+    materialCode: string;
+    materialName: string;
+    specification?: string;
+    unitId: string;
+    unitCode: string;
+    requisitionItemId?: string | null;
+    orderedQuantity: number;
+    receivedQuantity: number;
+    outstandingQuantity: number;
+    unitRate: number;
+    lineDiscount: number;
+    taxRate: number;
+    taxAmount: number;
+    lineTotal: number;
+    notes?: string;
+  }
+
+  interface PurchaseOrderApprovalRecord {
+    id: string;
+    poId: string;
+    actorUserId: string;
+    actorName: string;
+    actorRole: string;
+    action: 'DraftCreated' | 'Updated' | 'Submitted' | 'Approved' | 'Rejected' | 'Issued' | 'Cancelled';
+    comments?: string;
+    timestampUtc: string;
+  }
+
+  interface PurchaseOrderRecord {
+    id: string;
+    poNumber: string;
+    supplierId: string;
+    supplierCode: string;
+    supplierName: string;
+    supplierContact: string;
+    requisitionId?: string | null;
+    requisitionNumber?: string | null;
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    deliveryLocation: string;
+    orderDate: string;
+    expectedDeliveryDate: string;
+    currency: string;
+    paymentTerms: string;
+    notes?: string;
+    status: PurchaseOrderStatus;
+    items: PurchaseOrderItemRecord[];
+    subtotal: number;
+    subTotal?: number;
+    orderedQuantity?: number;
+    receivedQuantity?: number;
+    outstandingQuantity?: number;
+    itemsDiscount: number;
+    headerDiscount: number;
+    totalDiscount: number;
+    taxAmount: number;
+    freight: number;
+    grandTotal: number;
+    approvalHistory: PurchaseOrderApprovalRecord[];
+    rejectionReason?: string;
+    cancellationReason?: string;
+    approvedByUserId?: string;
+    approvedByName?: string;
+    approvedAtUtc?: string;
+    issuedByUserId?: string;
+    issuedByName?: string;
+    issuedAtUtc?: string;
+    createdAtUtc: string;
+    updatedAtUtc?: string;
+    createdByUserId: string;
+    createdByName: string;
+  }
+
+  interface QuotationRecord {
+    id: string;
+    quotationReference: string;
+    supplierId: string;
+    supplierName: string;
+    date: string;
+    validUntil: string;
+    currency: string;
+    paymentTerms: string;
+    notes?: string;
+    items: {
+      materialId: string;
+      materialCode: string;
+      materialName: string;
+      unitCode: string;
+      quotedQuantity: number;
+      unitRate: number;
+      discount: number;
+      taxRate: number;
+      estimatedFreight: number;
+      lineTotal: number;
+    }[];
+    createdAtUtc: string;
+  }
+
+  const suppliersFile = path.join(DATA_DIR, 'suppliers.json');
+  const purchaseOrdersFile = path.join(DATA_DIR, 'purchase_orders.json');
+  const quotationsFile = path.join(DATA_DIR, 'quotations.json');
+  const grnsFile = path.join(DATA_DIR, 'grns.json');
+  const receiptLedgerFile = path.join(DATA_DIR, 'receipt_ledger.json');
+  const stockLedgerFile = path.join(DATA_DIR, 'stock_ledger.json');
+  const inventoryBalancesFile = path.join(DATA_DIR, 'inventory_balances.json');
+
+  type GrnStatus =
+    | 'Draft'
+    | 'SubmittedForInspection'
+    | 'Inspected'
+    | 'Approved'
+    | 'Posted'
+    | 'Rejected'
+    | 'ReturnedForCorrection'
+    | 'Cancelled';
+
+  interface InspectionChecklist {
+    challanMatchesPO: boolean;
+    vehicleUnloadedSafely: boolean;
+    physicallyCounted: boolean;
+    packagingIntact: boolean;
+    batchTestCertsProvided: boolean;
+    testCertificateNumber?: string;
+    materialsMeetSpecs: boolean;
+    binTagsAttached: boolean;
+    inspectionRemarks: string;
+    discrepancyIdentified: boolean;
+    debitNoteRequired: boolean;
+    debitNoteReason?: string;
+  }
+
+  interface GoodsReceivedItemRecord {
+    id: string;
+    purchaseOrderItemId: string;
+    materialId: string;
+    materialCode: string;
+    materialName: string;
+    specification?: string;
+    unitId?: string;
+    unitCode: string;
+    orderedQuantity: number;
+    previouslyReceivedQuantity: number;
+    poOutstandingQuantity: number;
+    deliveredQuantity: number;
+    acceptedQuantity: number;
+    rejectedQuantity: number;
+    damagedQuantity: number;
+    shortQuantity: number;
+    remarks?: string;
+    storageLocation: string;
+    unitPrice: number;
+    totalAcceptedAmount: number;
+  }
+
+  interface GrnAuditEntry {
+    id: string;
+    grnId: string;
+    actorUserId: string;
+    actorName: string;
+    actorRole: string;
+    action: string;
+    comments: string;
+    timestampUtc: string;
+  }
+
+  interface GoodsReceivedNoteRecord {
+    id: string;
+    grnNumber: string;
+    purchaseOrderId: string;
+    purchaseOrderNumber: string;
+    supplierId: string;
+    supplierCode: string;
+    supplierName: string;
+    projectId: string;
+    projectName: string;
+    warehouseId: string;
+    warehouseName: string;
+    storageLocation: string;
+    grnDate: string;
+    receivedAtUtc: string;
+    deliveryChallanNumber: string;
+    deliveryChallanDate: string;
+    vehicleNumber: string;
+    deliveredBy: string;
+    status: GrnStatus;
+    inspectionChecklist: InspectionChecklist;
+    items: GoodsReceivedItemRecord[];
+    totalDeliveredQuantity: number;
+    totalAcceptedQuantity: number;
+    totalRejectedQuantity: number;
+    totalDamagedQuantity: number;
+    totalShortQuantity: number;
+    totalAcceptedValue: number;
+    generalRemarks?: string;
+    rejectionReason?: string;
+    correctionNotes?: string;
+    auditTrail: GrnAuditEntry[];
+    receivedByUserId: string;
+    receivedByName: string;
+    inspectedByUserId?: string;
+    inspectedByName?: string;
+    inspectedAtUtc?: string;
+    approvedByUserId?: string;
+    approvedByName?: string;
+    approvedAtUtc?: string;
+    postedByUserId?: string;
+    postedByName?: string;
+    postedAtUtc?: string;
+    createdAtUtc: string;
+    updatedAtUtc: string;
+  }
+
+  interface ReceiptLedgerRecord {
+    id: string;
+    grnId: string;
+    grnNumber: string;
+    purchaseOrderId: string;
+    purchaseOrderNumber: string;
+    supplierId: string;
+    supplierName: string;
+    projectId: string;
+    warehouseId: string;
+    materialId: string;
+    materialCode: string;
+    materialName: string;
+    unitCode: string;
+    acceptedQuantity: number;
+    unitPrice: number;
+    totalAmount: number;
+    storageLocation: string;
+    deliveryChallanNumber: string;
+    postedAtUtc: string;
+    postedByUserId: string;
+    postedByName: string;
+    reconciledWithInventoryLedger: boolean;
+  }
+
+  interface StockLedgerRecord {
+    id: string;
+    referenceNumber: string; // e.g. STK-YYYY-XXXX
+    transactionType: 'OpeningBalance' | 'GoodsReceivedNote' | 'MaterialIssue' | 'SiteReturn' | 'TransferOut' | 'TransferIn' | 'StockAdjustment';
+    sourceDocumentType: string;
+    sourceDocumentId: string;
+    sourceDocumentNumber: string;
+    sourceLineId: string;
+    materialId: string;
+    materialCode: string;
+    materialName: string;
+    unitCode: string;
+    warehouseId: string;
+    warehouseName: string;
+    projectId: string;
+    projectName: string;
+    quantityIn: number;
+    quantityOut: number;
+    signedQuantity: number;
+    unitCost: number;
+    transactionValue: number;
+    balanceQuantityAfter: number;
+    weightedAverageCostAfter: number;
+    totalValuationAfter: number;
+    batchNumber?: string;
+    idempotencyKey: string;
+    transactionDate: string;
+    timestampUtc: string;
+    createdByUserId: string;
+    createdByName: string;
+    remarks?: string;
+  }
+
+  interface InventoryBalanceRecord {
+    id: string;
+    materialId: string;
+    materialCode: string;
+    materialName: string;
+    categoryId?: string;
+    categoryName?: string;
+    unitCode: string;
+    warehouseId: string;
+    warehouseName: string;
+    projectId: string;
+    projectName: string;
+    quantityOnHand: number;
+    quantityReserved: number;
+    quantityAvailable: number;
+    quantityInTransit: number;
+    weightedAverageCost: number;
+    inventoryValue: number;
+    version: number;
+    lastUpdatedUtc: string;
+  }
+
+  const defaultSuppliers: SupplierRecord[] = [
+    {
+      id: 'SUP-APEX-01',
+      supplierCode: 'SUP-APEX',
+      normalizedSupplierCode: 'SUP-APEX',
+      name: 'Apex Structural Steel & Rebar Ltd.',
+      contactPerson: 'Robert Jenkins',
+      phone: '+1 (555) 342-8800',
+      email: 'orders@apexsteel.com',
+      address: '142 Industrial Way, Sector 4, Metro City',
+      taxReference: 'TAX-US-8849201',
+      paymentTerms: 'Net 30 Days',
+      notes: 'Certified mill distributor for Grade 500B deformed rebar and wire mesh.',
+      isActive: true,
+      createdAtUtc: '2026-01-10T08:00:00Z',
+      createdByUserId: 'USR-ADMIN-01',
+    },
+    {
+      id: 'SUP-HORIZON-02',
+      supplierCode: 'SUP-HORIZON',
+      normalizedSupplierCode: 'SUP-HORIZON',
+      name: 'Horizon Ready-Mix & Aggregates Corp.',
+      contactPerson: 'Elena Gomez',
+      phone: '+1 (555) 789-2244',
+      email: 'supply@horizonaggregates.com',
+      address: '88 Quarry Basin Road, North Harbor',
+      taxReference: 'TAX-US-6629104',
+      paymentTerms: 'Net 15 Days',
+      notes: 'Direct quarry operator for washed river sand, 20mm gravel, and CEM I cement.',
+      isActive: true,
+      createdAtUtc: '2026-01-12T09:30:00Z',
+      createdByUserId: 'USR-ADMIN-01',
+    },
+    {
+      id: 'SUP-VULCAN-03',
+      supplierCode: 'SUP-VULCAN',
+      normalizedSupplierCode: 'SUP-VULCAN',
+      name: 'Vulcan Piping & Infrastructure Supplies',
+      contactPerson: 'Marcus Sterling',
+      phone: '+1 (555) 443-9090',
+      email: 'sales@vulcanpipes.com',
+      address: '520 Logistics Boulevard, Central Depot',
+      taxReference: 'TAX-US-3391820',
+      paymentTerms: 'Net 45 Days',
+      notes: 'Approved supplier for heavy-duty uPVC and PPR drainage and stormwater piping systems.',
+      isActive: true,
+      createdAtUtc: '2026-01-18T11:15:00Z',
+      createdByUserId: 'USR-ADMIN-01',
+    },
+  ];
+
+  // Initialize storage files if missing
+  readJsonSafe(suppliersFile, defaultSuppliers);
+  readJsonSafe(purchaseOrdersFile, []);
+  readJsonSafe(quotationsFile, []);
+  readJsonSafe(grnsFile, []);
+  readJsonSafe(receiptLedgerFile, []);
+  readJsonSafe(stockLedgerFile, []);
+  readJsonSafe(inventoryBalancesFile, []);
+
+  // Helper: Number formatting and precision
+  function round2(num: number): number {
+    return Math.round((num + Number.EPSILON) * 100) / 100;
+  }
+
+  function round4(num: number): number {
+    return Math.round((num + Number.EPSILON) * 10000) / 10000;
+  }
+
+  // Helper: Next Stock Ledger Transaction Number generator (e.g. STK-2026-0001)
+  function generateNextStockLedgerNumber(entries: StockLedgerRecord[]): string {
+    const currentYear = new Date().getFullYear();
+    const prefix = `STK-${currentYear}-`;
+    const yearEntries = entries.filter((e) => e.referenceNumber && e.referenceNumber.startsWith(prefix));
+    let maxSeq = 0;
+    for (const e of yearEntries) {
+      const parts = e.referenceNumber.split('-');
+      if (parts.length === 3) {
+        const seq = parseInt(parts[2], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+    const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
+    return `${prefix}${nextSeq}`;
+  }
+
+  // Continuous Moving Weighted-Average Costing (WAC) formula per SCM-F-01 policy
+  function calculateWeightedAverageCost(
+    oldQty: number,
+    oldWac: number,
+    inQty: number,
+    inCost: number
+  ): { newQty: number; newWac: number; newVal: number } {
+    const prevQty = Math.max(0, oldQty);
+    const prevWac = Math.max(0, oldWac);
+    const prevVal = round2(prevQty * prevWac);
+
+    const incomingQty = Math.max(0, inQty);
+    const incomingCost = Math.max(0, inCost);
+    const incomingVal = round2(incomingQty * incomingCost);
+
+    const newQty = round2(prevQty + incomingQty);
+    const newVal = round2(prevVal + incomingVal);
+
+    let newWac = incomingCost;
+    if (newQty > 0) {
+      newWac = round4(newVal / newQty);
+    }
+    return { newQty, newWac, newVal };
+  }
+
+  // Authoritative Inventory Posting Service: Posts accepted GRN lines to Stock Ledger and updates Inventory Balances
+  function postGrnToInventoryLedger(
+    grn: GoodsReceivedNoteRecord,
+    po: PurchaseOrderRecord,
+    user: JwtPayload,
+    nowUtc: string,
+    stockLedger: StockLedgerRecord[],
+    inventoryBalances: InventoryBalanceRecord[],
+    materials: MaterialRecord[],
+    projects: ProjectRecord[]
+  ): { success: boolean; error?: string; postedCount: number } {
+    // Validate unit costs: Must be strictly positive for all lines with acceptedQuantity > 0
+    for (const item of grn.items) {
+      if (item.acceptedQuantity > 0) {
+        if (!item.unitPrice || item.unitPrice <= 0 || isNaN(item.unitPrice)) {
+          return {
+            success: false,
+            error: `Cannot value inventory posting: Material '${item.materialCode}' (${item.materialName}) has non-positive or invalid unit cost (${item.unitPrice}). A positive valuation rate is required for financial inventory accounting.`,
+            postedCount: 0,
+          };
+        }
+      }
+    }
+
+    const project = projects.find((p) => p.id === grn.projectId);
+    const warehouseName = grn.warehouseName || (grn.warehouseId === 'WH-02' ? 'North Industrial Depot & Yard' : 'Metro Central Staging Yard');
+    const projectName = project ? project.name : (grn.projectName || 'Site Project');
+
+    let postedCount = 0;
+
+    for (const item of grn.items) {
+      if (item.acceptedQuantity <= 0) continue;
+
+      const idempotencyKey = `GRN_${grn.id}_ITEM_${item.id}`;
+      // Idempotency guard: prevent duplicate stock ledger entry
+      const alreadyPosted = stockLedger.some((e) => e.idempotencyKey === idempotencyKey);
+      if (alreadyPosted) {
+        continue;
+      }
+
+      // Find location balance
+      let balance = inventoryBalances.find(
+        (b) => b.materialId === item.materialId && b.warehouseId === grn.warehouseId && b.projectId === grn.projectId
+      );
+
+      const prevQty = balance ? balance.quantityOnHand : 0;
+      const prevWac = balance ? balance.weightedAverageCost : 0;
+      const inQty = item.acceptedQuantity;
+      const inCost = item.unitPrice;
+
+      const { newQty, newWac, newVal } = calculateWeightedAverageCost(prevQty, prevWac, inQty, inCost);
+      const nextRefNumber = generateNextStockLedgerNumber(stockLedger);
+      const material = materials.find((m) => m.id === item.materialId);
+
+      const ledgerEntry: StockLedgerRecord = {
+        id: `STK-TXN-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`,
+        referenceNumber: nextRefNumber,
+        transactionType: 'GoodsReceivedNote',
+        sourceDocumentType: 'GoodsReceivedNote',
+        sourceDocumentId: grn.id,
+        sourceDocumentNumber: grn.grnNumber,
+        sourceLineId: item.id,
+        materialId: item.materialId,
+        materialCode: item.materialCode,
+        materialName: item.materialName,
+        unitCode: item.unitCode,
+        warehouseId: grn.warehouseId,
+        warehouseName,
+        projectId: grn.projectId,
+        projectName,
+        quantityIn: inQty,
+        quantityOut: 0,
+        signedQuantity: inQty,
+        unitCost: inCost,
+        transactionValue: round2(inQty * inCost),
+        balanceQuantityAfter: newQty,
+        weightedAverageCostAfter: newWac,
+        totalValuationAfter: newVal,
+        batchNumber: (item as any).batchNumber || grn.inspectionChecklist?.testCertificateNumber || undefined,
+        idempotencyKey,
+        transactionDate: grn.grnDate || nowUtc.split('T')[0],
+        timestampUtc: nowUtc,
+        createdByUserId: user.sub,
+        createdByName: user.fullName,
+        remarks: `Goods receipt intake via ${grn.grnNumber} against PO ${po.poNumber}. Supplier: ${grn.supplierName}. Challan: ${grn.deliveryChallanNumber}.`,
+      };
+
+      stockLedger.unshift(ledgerEntry);
+
+      if (balance) {
+        balance.quantityOnHand = newQty;
+        balance.quantityAvailable = round2(newQty - balance.quantityReserved);
+        balance.weightedAverageCost = newWac;
+        balance.inventoryValue = newVal;
+        balance.lastUpdatedUtc = nowUtc;
+        balance.version += 1;
+      } else {
+        balance = {
+          id: `BAL-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`,
+          materialId: item.materialId,
+          materialCode: item.materialCode,
+          materialName: item.materialName,
+          categoryId: material?.categoryId,
+          categoryName: material?.categoryName,
+          unitCode: item.unitCode,
+          warehouseId: grn.warehouseId,
+          warehouseName,
+          projectId: grn.projectId,
+          projectName,
+          quantityOnHand: newQty,
+          quantityReserved: 0,
+          quantityAvailable: newQty,
+          quantityInTransit: 0,
+          weightedAverageCost: newWac,
+          inventoryValue: newVal,
+          version: 1,
+          lastUpdatedUtc: nowUtc,
+        };
+        inventoryBalances.push(balance);
+      }
+
+      postedCount++;
+    }
+
+    return { success: true, postedCount };
+  }
+
+  // Helper: Next PO Number generator (e.g. PO-2026-0001)
+  function generateNextPoNumber(pos: PurchaseOrderRecord[]): string {
+    const currentYear = new Date().getFullYear();
+    const prefix = `PO-${currentYear}-`;
+    const yearPos = pos.filter((p) => p.poNumber && p.poNumber.startsWith(prefix));
+    let maxSeq = 0;
+    for (const p of yearPos) {
+      const parts = p.poNumber.split('-');
+      if (parts.length === 3) {
+        const seq = parseInt(parts[2], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+    const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
+    return `${prefix}${nextSeq}`;
+  }
+
+  // Helper: Calculate already allocated quantity for a requisition line in active POs
+  function getAllocatedQuantityForRequisitionItem(
+    pos: PurchaseOrderRecord[],
+    reqItemId: string,
+    excludePoId?: string
+  ): number {
+    let allocated = 0;
+    for (const po of pos) {
+      if (po.id === excludePoId || po.status === 'Cancelled' || po.status === 'Rejected') {
+        continue;
+      }
+      for (const item of po.items) {
+        if (item.requisitionItemId === reqItemId) {
+          allocated += item.orderedQuantity;
+        }
+      }
+    }
+    return round2(allocated);
+  }
+
+  // ------------------------------------------------------------------------
+  // API: SUPPLIERS
+  // ------------------------------------------------------------------------
+
+  // GET /api/suppliers
+  router.get('/suppliers', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const { search, status, page, pageSize } = req.query;
+    const suppliers = readJsonSafe<SupplierRecord[]>(suppliersFile, defaultSuppliers);
+
+    let filtered = [...suppliers];
+
+    if (search && typeof search === 'string') {
+      const term = search.trim().toUpperCase();
+      filtered = filtered.filter(
+        (s) =>
+          s.normalizedSupplierCode.includes(term) ||
+          s.name.toUpperCase().includes(term) ||
+          s.contactPerson.toUpperCase().includes(term) ||
+          s.email.toUpperCase().includes(term)
+      );
+    }
+
+    if (status && typeof status === 'string' && status !== 'ALL') {
+      const isActive = status === 'ACTIVE';
+      filtered = filtered.filter((s) => s.isActive === isActive);
+    }
+
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+    if (page && pageSize) {
+      const pageIndex = Math.max(1, parseInt(page as string, 10) || 1);
+      const size = Math.max(1, parseInt(pageSize as string, 10) || 20);
+      const totalCount = filtered.length;
+      const totalPages = Math.ceil(totalCount / size);
+      const paged = filtered.slice((pageIndex - 1) * size, pageIndex * size);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          items: paged,
+          pageIndex,
+          pageSize: size,
+          totalCount,
+          totalPages,
+        },
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: filtered,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/suppliers/:id
+  router.get('/suppliers/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const suppliers = readJsonSafe<SupplierRecord[]>(suppliersFile, defaultSuppliers);
+    const supplier = suppliers.find((s) => s.id === req.params.id || s.supplierCode === req.params.id);
+
+    if (!supplier) {
+      return res.status(404).json({
+        success: false,
+        message: `Supplier with ID or Code '${req.params.id}' was not found`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: supplier,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // POST /api/suppliers
+  router.post('/suppliers', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const {
+      supplierCode,
+      code,
+      name,
+      contactPerson,
+      phone,
+      email,
+      address,
+      taxReference,
+      paymentTerms,
+      notes,
+    } = req.body || {};
+
+    const codeInput = supplierCode || code;
+    if (!codeInput || !String(codeInput).trim()) {
+      return res.status(400).json({ success: false, message: 'Supplier code is required' });
+    }
+
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, message: 'Supplier legal/business name is required' });
+    }
+
+    if (!contactPerson || !String(contactPerson).trim()) {
+      return res.status(400).json({ success: false, message: 'Contact person is required' });
+    }
+
+    if (!phone || !String(phone).trim()) {
+      return res.status(400).json({ success: false, message: 'Phone number is required' });
+    }
+
+    if (!email || !String(email).trim()) {
+      return res.status(400).json({ success: false, message: 'Email address is required' });
+    }
+
+    const emailTrimmed = String(email).trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailTrimmed)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email address' });
+    }
+
+    if (!address || !String(address).trim()) {
+      return res.status(400).json({ success: false, message: 'Business address is required' });
+    }
+
+    const trimmedCode = String(codeInput).trim();
+    const normalizedCode = trimmedCode.toUpperCase();
+
+    const suppliers = readJsonSafe<SupplierRecord[]>(suppliersFile, defaultSuppliers);
+
+    if (suppliers.some((s) => s.normalizedSupplierCode === normalizedCode)) {
+      return res.status(409).json({
+        success: false,
+        message: `Supplier with code '${trimmedCode}' already exists. Supplier codes must be unique.`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    const nowUtc = new Date().toISOString();
+    const newSupplier: SupplierRecord = {
+      id: `SUP-${Date.now().toString(36).toUpperCase()}`,
+      supplierCode: trimmedCode,
+      normalizedSupplierCode: normalizedCode,
+      name: String(name).trim(),
+      contactPerson: String(contactPerson).trim(),
+      phone: String(phone).trim(),
+      email: emailTrimmed,
+      address: String(address).trim(),
+      taxReference: taxReference ? String(taxReference).trim() : undefined,
+      paymentTerms: paymentTerms ? String(paymentTerms).trim() : 'Net 30 Days',
+      notes: notes ? String(notes).trim() : undefined,
+      isActive: true,
+      createdAtUtc: nowUtc,
+      createdByUserId: req.user?.sub,
+    };
+
+    suppliers.push(newSupplier);
+    writeJsonAtomic(suppliersFile, suppliers);
+
+    return res.status(201).json({
+      success: true,
+      message: `Supplier '${newSupplier.name}' created successfully`,
+      data: newSupplier,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // PUT /api/suppliers/:id
+  router.put('/suppliers/:id', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const suppliers = readJsonSafe<SupplierRecord[]>(suppliersFile, defaultSuppliers);
+    const supplier = suppliers.find((s) => s.id === req.params.id);
+
+    if (!supplier) {
+      return res.status(404).json({ success: false, message: `Supplier '${req.params.id}' was not found` });
+    }
+
+    const {
+      name,
+      contactPerson,
+      phone,
+      email,
+      address,
+      taxReference,
+      paymentTerms,
+      notes,
+    } = req.body || {};
+
+    if (name) {
+      if (!String(name).trim()) return res.status(400).json({ success: false, message: 'Supplier name cannot be empty' });
+      supplier.name = String(name).trim();
+    }
+
+    if (contactPerson) {
+      if (!String(contactPerson).trim()) return res.status(400).json({ success: false, message: 'Contact person cannot be empty' });
+      supplier.contactPerson = String(contactPerson).trim();
+    }
+
+    if (phone) {
+      if (!String(phone).trim()) return res.status(400).json({ success: false, message: 'Phone cannot be empty' });
+      supplier.phone = String(phone).trim();
+    }
+
+    if (email) {
+      const emailTrimmed = String(email).trim();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailTrimmed)) {
+        return res.status(400).json({ success: false, message: 'Invalid email address' });
+      }
+      supplier.email = emailTrimmed;
+    }
+
+    if (address) {
+      supplier.address = String(address).trim();
+    }
+
+    if (taxReference !== undefined) {
+      supplier.taxReference = taxReference ? String(taxReference).trim() : undefined;
+    }
+
+    if (paymentTerms !== undefined) {
+      supplier.paymentTerms = paymentTerms ? String(paymentTerms).trim() : undefined;
+    }
+
+    if (notes !== undefined) {
+      supplier.notes = notes ? String(notes).trim() : undefined;
+    }
+
+    supplier.updatedAtUtc = new Date().toISOString();
+    supplier.updatedByUserId = req.user?.sub;
+
+    writeJsonAtomic(suppliersFile, suppliers);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Supplier updated successfully',
+      data: supplier,
+      timestampUtc: supplier.updatedAtUtc,
+    });
+  });
+
+  // PATCH /api/suppliers/:id/status
+  router.patch('/suppliers/:id/status', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const suppliers = readJsonSafe<SupplierRecord[]>(suppliersFile, defaultSuppliers);
+    const supplier = suppliers.find((s) => s.id === req.params.id);
+
+    if (!supplier) {
+      return res.status(404).json({ success: false, message: `Supplier '${req.params.id}' was not found` });
+    }
+
+    const { isActive, status } = req.body || {};
+    let resolvedActive: boolean | undefined = undefined;
+    if (typeof isActive === 'boolean') {
+      resolvedActive = isActive;
+    } else if (typeof status === 'string') {
+      resolvedActive = status.toUpperCase() === 'ACTIVE';
+    }
+
+    if (resolvedActive === undefined) {
+      return res.status(400).json({ success: false, message: "Field 'isActive' (boolean) or 'status' ('Active'|'Inactive') is required" });
+    }
+
+    supplier.isActive = resolvedActive;
+    supplier.updatedAtUtc = new Date().toISOString();
+    supplier.updatedByUserId = req.user?.sub;
+
+    writeJsonAtomic(suppliersFile, suppliers);
+
+    return res.status(200).json({
+      success: true,
+      message: `Supplier '${supplier.name}' ${resolvedActive ? 'activated' : 'deactivated'} successfully`,
+      data: {
+        ...supplier,
+        status: supplier.isActive ? 'Active' : 'Inactive',
+      },
+      timestampUtc: supplier.updatedAtUtc,
+    });
+  });
+
+  // GET /api/suppliers/:id/purchase-orders
+  router.get('/suppliers/:id/purchase-orders', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const supplierOrders = purchaseOrders.filter(
+      (po) => (po.supplierId === req.params.id || po.supplierCode === req.params.id) && canUserAccessProject(user, po.projectId)
+    );
+
+    supplierOrders.sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
+
+    return res.status(200).json({
+      success: true,
+      data: supplierOrders,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // ------------------------------------------------------------------------
+  // API: PURCHASE ORDERS
+  // ------------------------------------------------------------------------
+
+  // GET /api/requisitions/approved-for-po
+  // Helper to retrieve approved requisitions with available unallocated lines for PO creation
+  router.get('/requisitions/approved-for-po', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const approvedRequisitions = requisitions.filter(
+      (r) => r.status === 'Approved' && canUserAccessProject(user, r.projectId)
+    );
+
+    const eligible = approvedRequisitions.map((reqRecord) => {
+      const itemsWithAllocations = reqRecord.items.map((item) => {
+        const allocated = getAllocatedQuantityForRequisitionItem(purchaseOrders, item.id);
+        const unallocated = Math.max(0, round2(item.requestedQuantity - allocated));
+        return {
+          ...item,
+          allocatedQuantity: allocated,
+          unallocatedQuantity: unallocated,
+          isFullyAllocated: unallocated <= 0,
+        };
+      });
+
+      return {
+        id: reqRecord.id,
+        requisitionNumber: reqRecord.requisitionNumber,
+        projectId: reqRecord.projectId,
+        projectCode: reqRecord.projectCode,
+        projectName: reqRecord.projectName,
+        requiredDate: reqRecord.requiredDate,
+        purpose: reqRecord.purpose,
+        approvedByName: reqRecord.approvedByName,
+        approvedAtUtc: reqRecord.approvedAtUtc,
+        items: itemsWithAllocations,
+        hasAvailableLines: itemsWithAllocations.some((i) => i.unallocatedQuantity > 0),
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: eligible,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/purchase-orders
+  router.get('/purchase-orders', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+    const { search, status, supplierId, projectId, page = '1', pageSize = '20' } = req.query;
+
+    let filtered = purchaseOrders.filter((po) => canUserAccessProject(user, po.projectId));
+
+    if (supplierId && typeof supplierId === 'string' && supplierId !== 'ALL') {
+      filtered = filtered.filter((po) => po.supplierId === supplierId);
+    }
+
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      filtered = filtered.filter((po) => po.projectId === projectId);
+    }
+
+    if (status && typeof status === 'string' && status !== 'ALL') {
+      filtered = filtered.filter((po) => po.status === status);
+    }
+
+    if (search && typeof search === 'string') {
+      const term = search.trim().toUpperCase();
+      filtered = filtered.filter(
+        (po) =>
+          po.poNumber.toUpperCase().includes(term) ||
+          po.supplierName.toUpperCase().includes(term) ||
+          po.supplierCode.toUpperCase().includes(term) ||
+          po.projectName.toUpperCase().includes(term) ||
+          (po.requisitionNumber && po.requisitionNumber.toUpperCase().includes(term)) ||
+          po.items.some(
+            (i) => i.materialName.toUpperCase().includes(term) || i.materialCode.toUpperCase().includes(term)
+          )
+      );
+    }
+
+    // Sort newest first
+    filtered.sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
+
+    const pageIndex = Math.max(1, parseInt(page as string, 10) || 1);
+    const size = Math.max(1, parseInt(pageSize as string, 10) || 20);
+    const totalCount = filtered.length;
+    const totalPages = Math.ceil(totalCount / size);
+    const paged = filtered.slice((pageIndex - 1) * size, pageIndex * size);
+
+    // Compute summary metrics for dashboards
+    const metrics = {
+      totalCount,
+      totalCommittedValue: round2(filtered.reduce((sum, po) => sum + (po.status !== 'Cancelled' ? po.grandTotal : 0), 0)),
+      pendingApprovalCount: filtered.filter((po) => po.status === 'PendingApproval').length,
+      approvedCount: filtered.filter((po) => po.status === 'Approved').length,
+      issuedCount: filtered.filter((po) => po.status === 'Issued').length,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: paged,
+        pageIndex,
+        pageSize: size,
+        totalCount,
+        totalPages,
+        metrics,
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/purchase-orders/:id
+  router.get('/purchase-orders/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const po = purchaseOrders.find((p) => p.id === req.params.id || p.poNumber === req.params.id);
+    if (!po) {
+      return res.status(404).json({
+        success: false,
+        message: `Purchase Order '${req.params.id}' was not found`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    if (!canUserAccessProject(user, po.projectId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have access to purchase orders for this project site',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: po,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // POST /api/purchase-orders (Create PO)
+  router.post('/purchase-orders', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const suppliers = readJsonSafe<SupplierRecord[]>(suppliersFile, defaultSuppliers);
+    const projects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const user = req.user!;
+
+    const {
+      supplierId,
+      projectId,
+      deliveryLocation,
+      orderDate,
+      expectedDeliveryDate,
+      paymentTerms,
+      notes,
+      requisitionId,
+      items,
+      freight = 0,
+      headerDiscount = 0,
+      submitImmediately = false,
+      initialComments,
+    } = req.body || {};
+
+    if (!supplierId) {
+      return res.status(400).json({ success: false, message: 'Supplier selection is required' });
+    }
+
+    const supplier = suppliers.find((s) => s.id === supplierId && s.isActive);
+    if (!supplier) {
+      return res.status(400).json({ success: false, message: `Active supplier with ID '${supplierId}' was not found` });
+    }
+
+    if (!projectId) {
+      return res.status(400).json({ success: false, message: 'Project selection is required' });
+    }
+
+    const project = projects.find((p) => p.id === projectId && p.isActive);
+    if (!project) {
+      return res.status(400).json({ success: false, message: `Active project with ID '${projectId}' was not found` });
+    }
+
+    if (!canUserAccessProject(user, projectId)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: You are not authorized for project '${project.name}'`,
+      });
+    }
+
+    if (!expectedDeliveryDate || isNaN(Date.parse(expectedDeliveryDate))) {
+      return res.status(400).json({ success: false, message: 'Valid expected delivery date is required' });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Purchase order must have at least one line item' });
+    }
+
+    // Validate Requisition Integration if linked
+    let linkedRequisition: RequisitionRecord | null = null;
+    if (requisitionId) {
+      linkedRequisition = requisitions.find((r) => r.id === requisitionId || r.requisitionNumber === requisitionId) || null;
+      if (!linkedRequisition) {
+        return res.status(400).json({ success: false, message: `Requisition '${requisitionId}' was not found` });
+      }
+
+      // Backend Rule: Must be in Approved status!
+      if (linkedRequisition.status !== 'Approved') {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot create purchase order from requisition '${linkedRequisition.requisitionNumber}'. Requisition status is '${linkedRequisition.status}', but must be 'Approved'.`,
+        });
+      }
+
+      if (linkedRequisition.projectId !== project.id) {
+        return res.status(400).json({
+          success: false,
+          message: `Requisition '${linkedRequisition.requisitionNumber}' belongs to project '${linkedRequisition.projectName}', not '${project.name}'.`,
+        });
+      }
+    } else {
+      // Company workflow rule: Standalone PO requires business justification/notes
+      if (!notes || String(notes).trim().length < 5) {
+        return res.status(400).json({
+          success: false,
+          message: 'Standalone purchase orders without a source requisition require a procurement justification / order notes (minimum 5 characters).',
+        });
+      }
+    }
+
+    // Process and validate line items
+    const parsedItems: PurchaseOrderItemRecord[] = [];
+    const seenMaterialIds = new Set<string>();
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const line = items[idx];
+      if (!line.materialId) {
+        return res.status(400).json({ success: false, message: `Line #${idx + 1}: Material selection is required` });
+      }
+
+      if (seenMaterialIds.has(line.materialId)) {
+        return res.status(400).json({
+          success: false,
+          message: `Line #${idx + 1}: Duplicate material detected. Combine quantities on a single line item.`,
+        });
+      }
+      seenMaterialIds.add(line.materialId);
+
+      const material = materials.find((m) => m.id === line.materialId && m.isActive);
+      if (!material) {
+        return res.status(400).json({
+          success: false,
+          message: `Line #${idx + 1}: Material '${line.materialId}' is invalid or inactive`,
+        });
+      }
+
+      const orderedQty = parseFloat(line.orderedQuantity);
+      if (isNaN(orderedQty) || orderedQty <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Line #${idx + 1} (${material.name}): Ordered quantity must be a positive number greater than 0`,
+        });
+      }
+
+      const unitRate = parseFloat(line.unitRate);
+      if (isNaN(unitRate) || unitRate < 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Line #${idx + 1} (${material.name}): Unit rate must be a non-negative decimal`,
+        });
+      }
+
+      // Check Requisition allocation limits if line references requisition
+      if (linkedRequisition && line.requisitionItemId) {
+        const reqItem = linkedRequisition.items.find((ri) => ri.id === line.requisitionItemId);
+        if (!reqItem) {
+          return res.status(400).json({
+            success: false,
+            message: `Line #${idx + 1}: Requisition item '${line.requisitionItemId}' does not exist on requisition '${linkedRequisition.requisitionNumber}'`,
+          });
+        }
+
+        const alreadyAllocated = getAllocatedQuantityForRequisitionItem(purchaseOrders, reqItem.id);
+        const unallocated = round2(reqItem.requestedQuantity - alreadyAllocated);
+
+        if (orderedQty > unallocated) {
+          return res.status(400).json({
+            success: false,
+            message: `Cannot order ${orderedQty} ${reqItem.unitCode} of '${material.name}'. Only ${unallocated} ${reqItem.unitCode} remains unallocated on approved requisition '${linkedRequisition.requisitionNumber}' (Requested: ${reqItem.requestedQuantity}, Already ordered: ${alreadyAllocated}).`,
+          });
+        }
+      }
+
+      const lineDiscount = Math.max(0, parseFloat(line.lineDiscount) || 0);
+      const taxRate = Math.max(0, parseFloat(line.taxRate) || 0);
+
+      const lineSubtotal = round2(orderedQty * unitRate);
+      if (lineDiscount > lineSubtotal) {
+        return res.status(400).json({
+          success: false,
+          message: `Line #${idx + 1}: Line discount ($${lineDiscount}) cannot exceed line subtotal ($${lineSubtotal})`,
+        });
+      }
+
+      const taxable = round2(lineSubtotal - lineDiscount);
+      const lineTaxAmount = round2(taxable * (taxRate / 100));
+      const lineTotal = round2(taxable + lineTaxAmount);
+
+      parsedItems.push({
+        id: `POI-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+        parentPoId: '', // set below
+        materialId: material.id,
+        materialCode: material.itemCode,
+        materialName: material.name,
+        specification: material.specification,
+        unitId: material.baseUnitId,
+        unitCode: material.baseUnitName,
+        requisitionItemId: line.requisitionItemId || null,
+        orderedQuantity: orderedQty,
+        receivedQuantity: 0, // Strictly 0 until GRN workflow
+        outstandingQuantity: orderedQty,
+        unitRate: round2(unitRate),
+        lineDiscount: round2(lineDiscount),
+        taxRate: round2(taxRate),
+        taxAmount: lineTaxAmount,
+        lineTotal,
+        notes: line.notes ? String(line.notes).trim() : undefined,
+      });
+    }
+
+    // Calculate totals server-side
+    const subtotal = round2(parsedItems.reduce((acc, it) => acc + round2(it.orderedQuantity * it.unitRate), 0));
+    const itemsDiscount = round2(parsedItems.reduce((acc, it) => acc + it.lineDiscount, 0));
+    const headerDisc = Math.max(0, parseFloat(headerDiscount) || 0);
+    const totalDiscount = round2(itemsDiscount + headerDisc);
+    const taxAmount = round2(parsedItems.reduce((acc, it) => acc + it.taxAmount, 0));
+    const freightAmount = Math.max(0, parseFloat(freight) || 0);
+    const grandTotal = round2(subtotal - totalDiscount + taxAmount + freightAmount);
+
+    const newPoNumber = generateNextPoNumber(purchaseOrders);
+    const newPoId = `PO-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`;
+    const initialStatus: PurchaseOrderStatus = submitImmediately ? 'PendingApproval' : 'Draft';
+    const nowUtc = new Date().toISOString();
+
+    parsedItems.forEach((it) => (it.parentPoId = newPoId));
+
+    const history: PurchaseOrderApprovalRecord[] = [
+      {
+        id: `PO-HIS-${crypto.randomBytes(4).toString('hex')}`,
+        poId: newPoId,
+        actorUserId: user.sub,
+        actorName: user.fullName,
+        actorRole: user.roles[0] || 'User',
+        action: 'DraftCreated',
+        comments: initialComments ? String(initialComments).trim() : 'Purchase order draft created.',
+        timestampUtc: nowUtc,
+      },
+    ];
+
+    if (submitImmediately) {
+      history.push({
+        id: `PO-HIS-${crypto.randomBytes(4).toString('hex')}`,
+        poId: newPoId,
+        actorUserId: user.sub,
+        actorName: user.fullName,
+        actorRole: user.roles[0] || 'User',
+        action: 'Submitted',
+        comments: 'Purchase order submitted for review and approval.',
+        timestampUtc: nowUtc,
+      });
+    }
+
+    const newPo: PurchaseOrderRecord = {
+      id: newPoId,
+      poNumber: newPoNumber,
+      supplierId: supplier.id,
+      supplierCode: supplier.supplierCode,
+      supplierName: supplier.name,
+      supplierContact: `${supplier.contactPerson} (${supplier.email})`,
+      requisitionId: linkedRequisition ? linkedRequisition.id : null,
+      requisitionNumber: linkedRequisition ? linkedRequisition.requisitionNumber : null,
+      projectId: project.id,
+      projectCode: project.code,
+      projectName: project.name,
+      deliveryLocation: deliveryLocation ? String(deliveryLocation).trim() : 'Site Central Staging Yard',
+      orderDate: orderDate ? String(orderDate).substring(0, 10) : nowUtc.substring(0, 10),
+      expectedDeliveryDate: String(expectedDeliveryDate).substring(0, 10),
+      currency: 'USD',
+      paymentTerms: paymentTerms ? String(paymentTerms).trim() : (supplier.paymentTerms || 'Net 30 Days'),
+      notes: notes ? String(notes).trim() : undefined,
+      status: initialStatus,
+      items: parsedItems,
+      subtotal,
+      subTotal: subtotal,
+      orderedQuantity: round2(parsedItems.reduce((acc, it) => acc + it.orderedQuantity, 0)),
+      receivedQuantity: 0,
+      outstandingQuantity: round2(parsedItems.reduce((acc, it) => acc + it.outstandingQuantity, 0)),
+      itemsDiscount,
+      headerDiscount: headerDisc,
+      totalDiscount,
+      taxAmount,
+      freight: freightAmount,
+      grandTotal,
+      approvalHistory: history,
+      createdAtUtc: nowUtc,
+      updatedAtUtc: nowUtc,
+      createdByUserId: user.sub,
+      createdByName: user.fullName,
+    };
+
+    purchaseOrders.push(newPo);
+    writeJsonAtomic(purchaseOrdersFile, purchaseOrders);
+
+    return res.status(201).json({
+      success: true,
+      message: `Purchase order ${newPoNumber} created successfully in ${initialStatus} state`,
+      data: newPo,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // PUT /api/purchase-orders/:id (Update Draft PO)
+  router.put('/purchase-orders/:id', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const suppliers = readJsonSafe<SupplierRecord[]>(suppliersFile, defaultSuppliers);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+    const requisitions = readJsonSafe<RequisitionRecord[]>(requisitionsFile, []);
+    const user = req.user!;
+
+    const po = purchaseOrders.find((p) => p.id === req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: `Purchase Order '${req.params.id}' was not found` });
+    }
+
+    if (po.status !== 'Draft') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot update Purchase Order in status '${po.status}'. Only 'Draft' purchase orders can be edited.`,
+      });
+    }
+
+    if (!canUserAccessProject(user, po.projectId)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have access to this project site' });
+    }
+
+    const {
+      supplierId,
+      deliveryLocation,
+      orderDate,
+      expectedDeliveryDate,
+      paymentTerms,
+      notes,
+      items,
+      freight,
+      headerDiscount,
+      updateComments,
+    } = req.body || {};
+
+    if (supplierId && supplierId !== po.supplierId) {
+      const supplier = suppliers.find((s) => s.id === supplierId && s.isActive);
+      if (!supplier) {
+        return res.status(400).json({ success: false, message: `Supplier '${supplierId}' is invalid or inactive` });
+      }
+      po.supplierId = supplier.id;
+      po.supplierCode = supplier.supplierCode;
+      po.supplierName = supplier.name;
+      po.supplierContact = `${supplier.contactPerson} (${supplier.email})`;
+    }
+
+    if (deliveryLocation) {
+      po.deliveryLocation = String(deliveryLocation).trim();
+    }
+
+    if (orderDate) {
+      po.orderDate = String(orderDate).substring(0, 10);
+    }
+
+    if (expectedDeliveryDate) {
+      po.expectedDeliveryDate = String(expectedDeliveryDate).substring(0, 10);
+    }
+
+    if (paymentTerms) {
+      po.paymentTerms = String(paymentTerms).trim();
+    }
+
+    if (notes !== undefined) {
+      po.notes = notes ? String(notes).trim() : undefined;
+    }
+
+    if (Array.isArray(items)) {
+      if (items.length === 0) {
+        return res.status(400).json({ success: false, message: 'Purchase Order must have at least one line item' });
+      }
+
+      let linkedRequisition: RequisitionRecord | null = null;
+      if (po.requisitionId) {
+        linkedRequisition = requisitions.find((r) => r.id === po.requisitionId) || null;
+      }
+
+      const parsedItems: PurchaseOrderItemRecord[] = [];
+      const seenMaterialIds = new Set<string>();
+
+      for (let idx = 0; idx < items.length; idx++) {
+        const line = items[idx];
+        if (!line.materialId) {
+          return res.status(400).json({ success: false, message: `Line #${idx + 1}: Material is required` });
+        }
+        if (seenMaterialIds.has(line.materialId)) {
+          return res.status(400).json({ success: false, message: `Line #${idx + 1}: Duplicate material in PO lines` });
+        }
+        seenMaterialIds.add(line.materialId);
+
+        const material = materials.find((m) => m.id === line.materialId && m.isActive);
+        if (!material) {
+          return res.status(400).json({ success: false, message: `Line #${idx + 1}: Material '${line.materialId}' invalid or inactive` });
+        }
+
+        const orderedQty = parseFloat(line.orderedQuantity);
+        if (isNaN(orderedQty) || orderedQty <= 0) {
+          return res.status(400).json({ success: false, message: `Line #${idx + 1}: Quantity must be greater than 0` });
+        }
+
+        const unitRate = parseFloat(line.unitRate);
+        if (isNaN(unitRate) || unitRate < 0) {
+          return res.status(400).json({ success: false, message: `Line #${idx + 1}: Unit rate must be non-negative` });
+        }
+
+        if (linkedRequisition && line.requisitionItemId) {
+          const reqItem = linkedRequisition.items.find((ri) => ri.id === line.requisitionItemId);
+          if (reqItem) {
+            const alreadyAllocated = getAllocatedQuantityForRequisitionItem(purchaseOrders, reqItem.id, po.id);
+            const unallocated = round2(reqItem.requestedQuantity - alreadyAllocated);
+            if (orderedQty > unallocated) {
+              return res.status(400).json({
+                success: false,
+                message: `Cannot order ${orderedQty} ${reqItem.unitCode} of '${material.name}'. Remaining unallocated: ${unallocated} ${reqItem.unitCode}.`,
+              });
+            }
+          }
+        }
+
+        const lineDiscount = Math.max(0, parseFloat(line.lineDiscount) || 0);
+        const taxRate = Math.max(0, parseFloat(line.taxRate) || 0);
+        const lineSubtotal = round2(orderedQty * unitRate);
+        const taxable = round2(lineSubtotal - lineDiscount);
+        const lineTaxAmount = round2(taxable * (taxRate / 100));
+        const lineTotal = round2(taxable + lineTaxAmount);
+
+        parsedItems.push({
+          id: line.id || `POI-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+          parentPoId: po.id,
+          materialId: material.id,
+          materialCode: material.itemCode,
+          materialName: material.name,
+          specification: material.specification,
+          unitId: material.baseUnitId,
+          unitCode: material.baseUnitName,
+          requisitionItemId: line.requisitionItemId || null,
+          orderedQuantity: orderedQty,
+          receivedQuantity: 0,
+          outstandingQuantity: orderedQty,
+          unitRate: round2(unitRate),
+          lineDiscount: round2(lineDiscount),
+          taxRate: round2(taxRate),
+          taxAmount: lineTaxAmount,
+          lineTotal,
+          notes: line.notes ? String(line.notes).trim() : undefined,
+        });
+      }
+
+      po.items = parsedItems;
+    }
+
+    if (freight !== undefined) {
+      po.freight = Math.max(0, parseFloat(freight) || 0);
+    }
+
+    if (headerDiscount !== undefined) {
+      po.headerDiscount = Math.max(0, parseFloat(headerDiscount) || 0);
+    }
+
+    // Recompute financials
+    po.subtotal = round2(po.items.reduce((acc, it) => acc + round2(it.orderedQuantity * it.unitRate), 0));
+    po.itemsDiscount = round2(po.items.reduce((acc, it) => acc + it.lineDiscount, 0));
+    po.totalDiscount = round2(po.itemsDiscount + po.headerDiscount);
+    po.taxAmount = round2(po.items.reduce((acc, it) => acc + it.taxAmount, 0));
+    po.grandTotal = round2(po.subtotal - po.totalDiscount + po.taxAmount + po.freight);
+
+    const nowUtc = new Date().toISOString();
+    po.updatedAtUtc = nowUtc;
+
+    po.approvalHistory.push({
+      id: `PO-HIS-${crypto.randomBytes(4).toString('hex')}`,
+      poId: po.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'User',
+      action: 'Updated',
+      comments: updateComments ? String(updateComments).trim() : 'Purchase order draft revised.',
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(purchaseOrdersFile, purchaseOrders);
+
+    return res.status(200).json({
+      success: true,
+      message: `Purchase order ${po.poNumber} updated successfully`,
+      data: po,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/purchase-orders/:id/submit
+  router.post('/purchase-orders/:id/submit', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const po = purchaseOrders.find((p) => p.id === req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: `Purchase Order '${req.params.id}' was not found` });
+    }
+
+    if (po.status !== 'Draft') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot submit Purchase Order in status '${po.status}'. Only 'Draft' orders can be submitted.`,
+      });
+    }
+
+    if (!po.items || po.items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Cannot submit a purchase order with no line items' });
+    }
+
+    const { comments } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    po.status = 'PendingApproval';
+    po.updatedAtUtc = nowUtc;
+
+    po.approvalHistory.push({
+      id: `PO-HIS-${crypto.randomBytes(4).toString('hex')}`,
+      poId: po.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'User',
+      action: 'Submitted',
+      comments: comments ? String(comments).trim() : 'Submitted for Project Manager review and approval.',
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(purchaseOrdersFile, purchaseOrders);
+
+    return res.status(200).json({
+      success: true,
+      message: `Purchase Order ${po.poNumber} submitted for approval`,
+      data: po,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/purchase-orders/:id/approve
+  router.post('/purchase-orders/:id/approve', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const po = purchaseOrders.find((p) => p.id === req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: `Purchase Order '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessProject(user, po.projectId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have approval authority over this project site',
+      });
+    }
+
+    // Policy Rule: Prevent Self-Approval (creator cannot approve their own PO unless SuperAdmin)
+    if (po.createdByUserId === user.sub && !user.roles.includes('SuperAdmin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Policy Violation: Requesters / Procurement officers cannot approve their own purchase orders. Requires independent Project Manager or executive approval.',
+      });
+    }
+
+    if (po.status !== 'PendingApproval') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot approve Purchase Order in status '${po.status}'. Only 'PendingApproval' orders can be approved.`,
+      });
+    }
+
+    const { comments } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    po.status = 'Approved';
+    po.approvedByUserId = user.sub;
+    po.approvedByName = user.fullName;
+    po.approvedAtUtc = nowUtc;
+    po.updatedAtUtc = nowUtc;
+
+    po.approvalHistory.push({
+      id: `PO-HIS-${crypto.randomBytes(4).toString('hex')}`,
+      poId: po.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles.find((r) => ['SuperAdmin', 'ProjectManager', 'InventoryManager'].includes(r)) || user.roles[0],
+      action: 'Approved',
+      comments: comments ? String(comments).trim() : 'Purchase Order approved for vendor issuance.',
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(purchaseOrdersFile, purchaseOrders);
+
+    return res.status(200).json({
+      success: true,
+      message: `Purchase Order ${po.poNumber} has been approved`,
+      data: po,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/purchase-orders/:id/reject
+  router.post('/purchase-orders/:id/reject', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const po = purchaseOrders.find((p) => p.id === req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: `Purchase Order '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessProject(user, po.projectId)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have authority over this project site' });
+    }
+
+    if (po.status !== 'PendingApproval') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot reject Purchase Order in '${po.status}' state. Only pending 'PendingApproval' orders can be rejected.`,
+      });
+    }
+
+    const { reason, comments } = req.body || {};
+    const rejectionReason = String(reason || comments || '').trim();
+
+    if (!rejectionReason || rejectionReason.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rejection reason is mandatory (minimum 3 characters). Please detail why the order was rejected.',
+      });
+    }
+
+    const nowUtc = new Date().toISOString();
+    po.status = 'Rejected';
+    po.rejectionReason = rejectionReason;
+    po.updatedAtUtc = nowUtc;
+
+    po.approvalHistory.push({
+      id: `PO-HIS-${crypto.randomBytes(4).toString('hex')}`,
+      poId: po.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles.find((r) => ['SuperAdmin', 'ProjectManager', 'InventoryManager'].includes(r)) || user.roles[0],
+      action: 'Rejected',
+      comments: rejectionReason,
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(purchaseOrdersFile, purchaseOrders);
+
+    return res.status(200).json({
+      success: true,
+      message: `Purchase Order ${po.poNumber} has been rejected`,
+      data: po,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/purchase-orders/:id/issue
+  router.post('/purchase-orders/:id/issue', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const po = purchaseOrders.find((p) => p.id === req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: `Purchase Order '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessProject(user, po.projectId)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have access to this project site' });
+    }
+
+    if (po.status !== 'Approved') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot issue Purchase Order in status '${po.status}'. Only 'Approved' purchase orders can be issued to vendors.`,
+      });
+    }
+
+    const { comments } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    po.status = 'Issued';
+    po.issuedByUserId = user.sub;
+    po.issuedByName = user.fullName;
+    po.issuedAtUtc = nowUtc;
+    po.updatedAtUtc = nowUtc;
+
+    po.approvalHistory.push({
+      id: `PO-HIS-${crypto.randomBytes(4).toString('hex')}`,
+      poId: po.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'User',
+      action: 'Issued',
+      comments: comments ? String(comments).trim() : `Purchase Order formally issued and dispatched to supplier ${po.supplierName}.`,
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(purchaseOrdersFile, purchaseOrders);
+
+    return res.status(200).json({
+      success: true,
+      message: `Purchase Order ${po.poNumber} has been issued to supplier ${po.supplierName}`,
+      data: po,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/purchase-orders/:id/cancel
+  router.post('/purchase-orders/:id/cancel', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const po = purchaseOrders.find((p) => p.id === req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: `Purchase Order '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessProject(user, po.projectId)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have authority over this project site' });
+    }
+
+    if (po.status === 'Cancelled') {
+      return res.status(400).json({ success: false, message: 'Purchase Order is already cancelled' });
+    }
+
+    if (po.status === 'FullyReceived') {
+      return res.status(400).json({ success: false, message: 'Cannot cancel a fully received purchase order' });
+    }
+
+    const { reason, comments } = req.body || {};
+    const cancellationReason = String(reason || comments || '').trim();
+
+    if (!cancellationReason || cancellationReason.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cancellation reason is mandatory (minimum 3 characters). Please specify why this order is cancelled.',
+      });
+    }
+
+    const nowUtc = new Date().toISOString();
+    po.status = 'Cancelled';
+    po.cancellationReason = cancellationReason;
+    po.updatedAtUtc = nowUtc;
+
+    po.approvalHistory.push({
+      id: `PO-HIS-${crypto.randomBytes(4).toString('hex')}`,
+      poId: po.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'User',
+      action: 'Cancelled',
+      comments: cancellationReason,
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(purchaseOrdersFile, purchaseOrders);
+
+    return res.status(200).json({
+      success: true,
+      message: `Purchase Order ${po.poNumber} has been cancelled`,
+      data: po,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // GET /api/purchase-orders/:id/history
+  router.get('/purchase-orders/:id/history', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const po = purchaseOrders.find((p) => p.id === req.params.id || p.poNumber === req.params.id);
+    if (!po) {
+      return res.status(404).json({ success: false, message: `Purchase Order '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessProject(user, po.projectId)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: Access denied to this project site' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: po.approvalHistory,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // ------------------------------------------------------------------------
+  // API: QUOTATIONS & RATE COMPARISONS (LIGHTWEIGHT MVP)
+  // ------------------------------------------------------------------------
+
+  // GET /api/quotations
+  router.get('/quotations', authMiddleware, (_req: AuthenticatedRequest, res: Response) => {
+    const quotations = readJsonSafe<QuotationRecord[]>(quotationsFile, []);
+    return res.status(200).json({
+      success: true,
+      data: quotations,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // POST /api/quotations
+  router.post('/quotations', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const { quotationReference, supplierId, date, validUntil, paymentTerms, items, notes } = req.body || {};
+    const suppliers = readJsonSafe<SupplierRecord[]>(suppliersFile, defaultSuppliers);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+    const quotations = readJsonSafe<QuotationRecord[]>(quotationsFile, []);
+
+    if (!quotationReference || !String(quotationReference).trim()) {
+      return res.status(400).json({ success: false, message: 'Quotation reference number is required' });
+    }
+
+    const supplier = suppliers.find((s) => s.id === supplierId && s.isActive);
+    if (!supplier) {
+      return res.status(400).json({ success: false, message: 'Valid active supplier is required' });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Quotation must include at least one material line' });
+    }
+
+    const parsedItems = items.map((it: any) => {
+      const material = materials.find((m) => m.id === it.materialId);
+      const quotedQty = parseFloat(it.quotedQuantity) || 1;
+      const rate = parseFloat(it.unitRate) || 0;
+      const disc = parseFloat(it.discount) || 0;
+      const tax = parseFloat(it.taxRate) || 0;
+      const freight = parseFloat(it.estimatedFreight) || 0;
+      const taxable = Math.max(0, quotedQty * rate - disc);
+      const lineTotal = round2(taxable + taxable * (tax / 100) + freight);
+
+      return {
+        materialId: material?.id || it.materialId,
+        materialCode: material?.itemCode || it.materialCode || 'MAT',
+        materialName: material?.name || it.materialName || 'Material',
+        unitCode: material?.baseUnitName || it.unitCode || 'Unit',
+        quotedQuantity: quotedQty,
+        unitRate: rate,
+        discount: disc,
+        taxRate: tax,
+        estimatedFreight: freight,
+        lineTotal,
+      };
+    });
+
+    const nowUtc = new Date().toISOString();
+    const newQuotation: QuotationRecord = {
+      id: `QT-${Date.now().toString(36).toUpperCase()}`,
+      quotationReference: String(quotationReference).trim(),
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      date: date ? String(date).substring(0, 10) : nowUtc.substring(0, 10),
+      validUntil: validUntil ? String(validUntil).substring(0, 10) : nowUtc.substring(0, 10),
+      currency: 'USD',
+      paymentTerms: paymentTerms ? String(paymentTerms).trim() : (supplier.paymentTerms || 'Net 30 Days'),
+      notes: notes ? String(notes).trim() : undefined,
+      items: parsedItems,
+      createdAtUtc: nowUtc,
+    };
+
+    quotations.push(newQuotation);
+    writeJsonAtomic(quotationsFile, quotations);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Quotation registered successfully',
+      data: newQuotation,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // GET /api/quotations/compare
+  router.get('/quotations/compare', authMiddleware, (_req: AuthenticatedRequest, res: Response) => {
+    const quotations = readJsonSafe<QuotationRecord[]>(quotationsFile, []);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, defaultMaterials);
+
+    // Group comparisons by material
+    const materialMap = new Map<string, {
+      materialId: string;
+      materialCode: string;
+      materialName: string;
+      unitCode: string;
+      quotes: {
+        quotationId: string;
+        quotationReference: string;
+        supplierId: string;
+        supplierName: string;
+        validUntil: string;
+        quotedQuantity: number;
+        unitRate: number;
+        discount: number;
+        taxRate: number;
+        estimatedFreight: number;
+        lineTotal: number;
+        effectiveUnitCost: number;
+      }[];
+    }>();
+
+    for (const mat of materials) {
+      if (!mat.isActive) continue;
+      materialMap.set(mat.id, {
+        materialId: mat.id,
+        materialCode: mat.itemCode,
+        materialName: mat.name,
+        unitCode: mat.baseUnitName,
+        quotes: [],
+      });
+    }
+
+    for (const qt of quotations) {
+      for (const item of qt.items) {
+        let entry = materialMap.get(item.materialId);
+        if (!entry) {
+          entry = {
+            materialId: item.materialId,
+            materialCode: item.materialCode,
+            materialName: item.materialName,
+            unitCode: item.unitCode,
+            quotes: [],
+          };
+          materialMap.set(item.materialId, entry);
+        }
+
+        const effectiveUnitCost = item.quotedQuantity > 0 ? round2(item.lineTotal / item.quotedQuantity) : item.unitRate;
+
+        entry.quotes.push({
+          quotationId: qt.id,
+          quotationReference: qt.quotationReference,
+          supplierId: qt.supplierId,
+          supplierName: qt.supplierName,
+          validUntil: qt.validUntil,
+          quotedQuantity: item.quotedQuantity,
+          unitRate: item.unitRate,
+          discount: item.discount,
+          taxRate: item.taxRate,
+          estimatedFreight: item.estimatedFreight,
+          lineTotal: item.lineTotal,
+          effectiveUnitCost,
+        });
+      }
+    }
+
+    // Filter to materials that actually have at least 1 quote and sort quotes lowest effective cost first
+    const comparisonResults = Array.from(materialMap.values())
+      .filter((m) => m.quotes.length > 0)
+      .map((m) => {
+        m.quotes.sort((a, b) => a.effectiveUnitCost - b.effectiveUnitCost);
+        return {
+          ...m,
+          lowestRateSupplier: m.quotes[0]?.supplierName || 'N/A',
+          lowestEffectiveRate: m.quotes[0]?.effectiveUnitCost || 0,
+        };
+      });
+
+    return res.status(200).json({
+      success: true,
+      data: comparisonResults,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // ------------------------------------------------------------------------
+  // API: GOODS RECEIVED NOTES (GRN) & RECEIPT CONTROL
+  // ------------------------------------------------------------------------
+
+  // GET /api/grns (List GRNs with filters & pagination)
+  router.get('/grns', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const {
+      search,
+      purchaseOrderId,
+      supplierId,
+      warehouseId,
+      projectId,
+      status,
+      startDate,
+      endDate,
+      page,
+      pageSize,
+    } = req.query;
+
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const user = req.user!;
+
+    let filtered = grns.filter((g) => canUserAccessProject(user, g.projectId));
+
+    if (purchaseOrderId && typeof purchaseOrderId === 'string' && purchaseOrderId !== 'ALL') {
+      filtered = filtered.filter((g) => g.purchaseOrderId === purchaseOrderId || g.purchaseOrderNumber === purchaseOrderId);
+    }
+
+    if (supplierId && typeof supplierId === 'string' && supplierId !== 'ALL') {
+      filtered = filtered.filter((g) => g.supplierId === supplierId);
+    }
+
+    if (warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL') {
+      filtered = filtered.filter((g) => g.warehouseId === warehouseId);
+    }
+
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      filtered = filtered.filter((g) => g.projectId === projectId);
+    }
+
+    if (status && typeof status === 'string' && status !== 'ALL') {
+      filtered = filtered.filter((g) => g.status === status);
+    }
+
+    if (startDate && typeof startDate === 'string') {
+      filtered = filtered.filter((g) => g.grnDate >= startDate);
+    }
+
+    if (endDate && typeof endDate === 'string') {
+      filtered = filtered.filter((g) => g.grnDate <= endDate);
+    }
+
+    if (search && typeof search === 'string') {
+      const term = search.trim().toUpperCase();
+      filtered = filtered.filter(
+        (g) =>
+          g.grnNumber.toUpperCase().includes(term) ||
+          g.purchaseOrderNumber.toUpperCase().includes(term) ||
+          g.supplierName.toUpperCase().includes(term) ||
+          g.deliveryChallanNumber.toUpperCase().includes(term) ||
+          g.vehicleNumber.toUpperCase().includes(term) ||
+          g.items.some(
+            (i) => i.materialName.toUpperCase().includes(term) || i.materialCode.toUpperCase().includes(term)
+          )
+      );
+    }
+
+    filtered.sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
+
+    const pageIndex = Math.max(1, parseInt(page as string, 10) || 1);
+    const size = Math.max(1, parseInt(pageSize as string, 10) || 20);
+    const totalCount = filtered.length;
+    const totalPages = Math.ceil(totalCount / size);
+    const paged = filtered.slice((pageIndex - 1) * size, pageIndex * size);
+
+    const metrics = {
+      totalCount,
+      draftCount: filtered.filter((g) => g.status === 'Draft').length,
+      pendingInspectionCount: filtered.filter((g) => g.status === 'SubmittedForInspection').length,
+      inspectedCount: filtered.filter((g) => g.status === 'Inspected').length,
+      approvedCount: filtered.filter((g) => g.status === 'Approved').length,
+      postedCount: filtered.filter((g) => g.status === 'Posted').length,
+      totalAcceptedValue: round2(
+        filtered
+          .filter((g) => g.status !== 'Cancelled' && g.status !== 'Rejected')
+          .reduce((sum, g) => sum + (g.totalAcceptedValue || 0), 0)
+      ),
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: paged,
+        pageIndex,
+        pageSize: size,
+        totalCount,
+        totalPages,
+        metrics,
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/grns/:id (Retrieve single GRN)
+  router.get('/grns/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const user = req.user!;
+
+    const grn = grns.find((g) => g.id === req.params.id || g.grnNumber === req.params.id);
+    if (!grn) {
+      return res.status(404).json({
+        success: false,
+        message: `Goods Received Note '${req.params.id}' was not found`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    if (!canUserAccessProject(user, grn.projectId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have access to goods receipts for this project site',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: grn,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/grns/:id/history (Audit Trail)
+  router.get('/grns/:id/history', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const user = req.user!;
+
+    const grn = grns.find((g) => g.id === req.params.id || g.grnNumber === req.params.id);
+    if (!grn) {
+      return res.status(404).json({
+        success: false,
+        message: `Goods Received Note '${req.params.id}' was not found`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    if (!canUserAccessProject(user, grn.projectId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have access to this project site',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: grn.auditTrail,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // POST /api/grns (Create Draft GRN against issued PO)
+  router.post('/grns', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const {
+      purchaseOrderId,
+      warehouseId,
+      warehouseName,
+      storageLocation,
+      deliveryChallanNumber,
+      deliveryChallanDate,
+      vehicleNumber,
+      deliveredBy,
+      grnDate,
+      generalRemarks,
+      items,
+      inspectionChecklist,
+    } = req.body || {};
+
+    if (!purchaseOrderId || !String(purchaseOrderId).trim()) {
+      return res.status(400).json({ success: false, message: 'Purchase Order ID is required' });
+    }
+
+    const po = purchaseOrders.find((p) => p.id === purchaseOrderId || p.poNumber === purchaseOrderId);
+    if (!po) {
+      return res.status(404).json({
+        success: false,
+        message: `Purchase Order '${purchaseOrderId}' was not found`,
+      });
+    }
+
+    if (!canUserAccessProject(user, po.projectId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have authority to receive goods for this project site',
+      });
+    }
+
+    if (po.status === 'Cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot create a Goods Received Note against a cancelled Purchase Order',
+      });
+    }
+
+    if (po.status === 'FullyReceived') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot create a Goods Received Note against a fully received Purchase Order. All items have been received.',
+      });
+    }
+
+    if (po.status !== 'Issued' && po.status !== 'PartiallyReceived') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot receive goods against Purchase Order in status '${po.status}'. The order must be 'Issued' or 'PartiallyReceived'.`,
+      });
+    }
+
+    if (!deliveryChallanNumber || !String(deliveryChallanNumber).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Supplier delivery challan / waybill number is mandatory for audit verification',
+      });
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one line item must be included in the Goods Received Note',
+      });
+    }
+
+    // Process line items against PO items
+    const processedItems: GoodsReceivedItemRecord[] = [];
+    let totalDelivered = 0;
+    let totalAccepted = 0;
+    let totalRejected = 0;
+    let totalDamaged = 0;
+    let totalShort = 0;
+    let totalValue = 0;
+
+    for (const rawItem of items) {
+      const poItem = po.items.find(
+        (pi) => pi.id === rawItem.purchaseOrderItemId || pi.materialId === rawItem.materialId
+      );
+
+      if (!poItem) {
+        return res.status(400).json({
+          success: false,
+          message: `Line item does not match any valid purchase order line in ${po.poNumber}`,
+        });
+      }
+
+      const delivered = Math.max(0, parseFloat(rawItem.deliveredQuantity) || 0);
+      const accepted = rawItem.acceptedQuantity !== undefined
+        ? Math.max(0, parseFloat(rawItem.acceptedQuantity) || 0)
+        : delivered;
+      const rejected = Math.max(0, parseFloat(rawItem.rejectedQuantity) || 0);
+      const damaged = Math.max(0, parseFloat(rawItem.damagedQuantity) || 0);
+      const short = Math.max(0, parseFloat(rawItem.shortQuantity) || 0);
+
+      // Invariant: delivered = accepted + rejected
+      if (Math.abs(delivered - (accepted + rejected)) > 0.01) {
+        return res.status(400).json({
+          success: false,
+          message: `Validation Error on item ${poItem.materialCode}: Delivered quantity (${delivered}) must exactly equal accepted (${accepted}) plus rejected (${rejected}).`,
+        });
+      }
+
+      // Over-receipt prevention policy
+      const remainingOutstanding = poItem.outstandingQuantity;
+      if (accepted > remainingOutstanding) {
+        return res.status(400).json({
+          success: false,
+          message: `Over-Receipt Violation: Accepted quantity (${accepted}) exceeds purchase order outstanding balance (${remainingOutstanding}) for material '${poItem.materialName}' (${poItem.materialCode}).`,
+        });
+      }
+
+      const unitPrice = poItem.unitRate;
+      const totalAcceptedAmount = round2(accepted * unitPrice);
+
+      totalDelivered = round2(totalDelivered + delivered);
+      totalAccepted = round2(totalAccepted + accepted);
+      totalRejected = round2(totalRejected + rejected);
+      totalDamaged = round2(totalDamaged + damaged);
+      totalShort = round2(totalShort + short);
+      totalValue = round2(totalValue + totalAcceptedAmount);
+
+      processedItems.push({
+        id: `GRI-${crypto.randomBytes(4).toString('hex')}`,
+        purchaseOrderItemId: poItem.id,
+        materialId: poItem.materialId,
+        materialCode: poItem.materialCode,
+        materialName: poItem.materialName,
+        specification: poItem.specification,
+        unitId: poItem.unitId,
+        unitCode: poItem.unitCode,
+        orderedQuantity: poItem.orderedQuantity,
+        previouslyReceivedQuantity: poItem.receivedQuantity,
+        poOutstandingQuantity: remainingOutstanding,
+        deliveredQuantity: delivered,
+        acceptedQuantity: accepted,
+        rejectedQuantity: rejected,
+        damagedQuantity: damaged,
+        shortQuantity: short,
+        remarks: rawItem.remarks ? String(rawItem.remarks).trim() : undefined,
+        storageLocation: rawItem.storageLocation
+          ? String(rawItem.storageLocation).trim()
+          : (storageLocation ? String(storageLocation).trim() : po.deliveryLocation || 'Bay 1 Staging Yard'),
+        unitPrice,
+        totalAcceptedAmount,
+      });
+    }
+
+    // Auto-generate sequential GRN number: GRN-YYYY-XXXX
+    const currentYear = new Date().getFullYear();
+    const yearPrefix = `GRN-${currentYear}-`;
+    const yearGrns = grns.filter((g) => g.grnNumber && g.grnNumber.startsWith(yearPrefix));
+    let nextSeq = 1;
+    if (yearGrns.length > 0) {
+      const seqs = yearGrns.map((g) => {
+        const numPart = g.grnNumber.substring(yearPrefix.length);
+        const parsed = parseInt(numPart, 10);
+        return isNaN(parsed) ? 0 : parsed;
+      });
+      nextSeq = Math.max(...seqs) + 1;
+    }
+    const grnNumber = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
+
+    const nowUtc = new Date().toISOString();
+    const effectiveWarehouseId = warehouseId || (user.warehouseScopes[0] || 'WH-01');
+    const effectiveWarehouseName = warehouseName || 'Metro Central Staging Yard';
+
+    const defaultChecklist: InspectionChecklist = {
+      challanMatchesPO: inspectionChecklist?.challanMatchesPO ?? true,
+      vehicleUnloadedSafely: inspectionChecklist?.vehicleUnloadedSafely ?? true,
+      physicallyCounted: inspectionChecklist?.physicallyCounted ?? true,
+      packagingIntact: inspectionChecklist?.packagingIntact ?? true,
+      batchTestCertsProvided: inspectionChecklist?.batchTestCertsProvided ?? false,
+      testCertificateNumber: inspectionChecklist?.testCertificateNumber ? String(inspectionChecklist.testCertificateNumber).trim() : undefined,
+      materialsMeetSpecs: inspectionChecklist?.materialsMeetSpecs ?? true,
+      binTagsAttached: inspectionChecklist?.binTagsAttached ?? true,
+      inspectionRemarks: inspectionChecklist?.inspectionRemarks ? String(inspectionChecklist.inspectionRemarks).trim() : '',
+      discrepancyIdentified: inspectionChecklist?.discrepancyIdentified ?? (totalRejected > 0 || totalDamaged > 0 || totalShort > 0),
+      debitNoteRequired: inspectionChecklist?.debitNoteRequired ?? false,
+      debitNoteReason: inspectionChecklist?.debitNoteReason ? String(inspectionChecklist.debitNoteReason).trim() : undefined,
+    };
+
+    const newGrn: GoodsReceivedNoteRecord = {
+      id: `GRN-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`,
+      grnNumber,
+      purchaseOrderId: po.id,
+      purchaseOrderNumber: po.poNumber,
+      supplierId: po.supplierId,
+      supplierCode: po.supplierCode,
+      supplierName: po.supplierName,
+      projectId: po.projectId,
+      projectName: po.projectName,
+      warehouseId: effectiveWarehouseId,
+      warehouseName: effectiveWarehouseName,
+      storageLocation: storageLocation ? String(storageLocation).trim() : po.deliveryLocation,
+      grnDate: grnDate ? String(grnDate).trim() : nowUtc.substring(0, 10),
+      receivedAtUtc: nowUtc,
+      deliveryChallanNumber: String(deliveryChallanNumber).trim(),
+      deliveryChallanDate: deliveryChallanDate ? String(deliveryChallanDate).trim() : nowUtc.substring(0, 10),
+      vehicleNumber: vehicleNumber ? String(vehicleNumber).trim() : 'N/A',
+      deliveredBy: deliveredBy ? String(deliveredBy).trim() : 'Carrier Representative',
+      status: 'Draft',
+      inspectionChecklist: defaultChecklist,
+      items: processedItems,
+      totalDeliveredQuantity: totalDelivered,
+      totalAcceptedQuantity: totalAccepted,
+      totalRejectedQuantity: totalRejected,
+      totalDamagedQuantity: totalDamaged,
+      totalShortQuantity: totalShort,
+      totalAcceptedValue: totalValue,
+      generalRemarks: generalRemarks ? String(generalRemarks).trim() : undefined,
+      auditTrail: [
+        {
+          id: `GA-${crypto.randomBytes(4).toString('hex')}`,
+          grnId: '',
+          actorUserId: user.sub,
+          actorName: user.fullName,
+          actorRole: user.roles[0] || 'Storekeeper',
+          action: 'DraftCreated',
+          comments: `Goods Received Note draft created against ${po.poNumber}. Delivery Challan: ${deliveryChallanNumber}.`,
+          timestampUtc: nowUtc,
+        },
+      ],
+      receivedByUserId: user.sub,
+      receivedByName: user.fullName,
+      createdAtUtc: nowUtc,
+      updatedAtUtc: nowUtc,
+    };
+
+    newGrn.auditTrail[0].grnId = newGrn.id;
+    grns.unshift(newGrn);
+    writeJsonAtomic(grnsFile, grns);
+
+    return res.status(201).json({
+      success: true,
+      message: `Goods Received Note ${newGrn.grnNumber} created in Draft status`,
+      data: newGrn,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // PUT /api/grns/:id (Update Draft or Returned GRN)
+  router.put('/grns/:id', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const grn = grns.find((g) => g.id === req.params.id);
+    if (!grn) {
+      return res.status(404).json({ success: false, message: `Goods Received Note '${req.params.id}' was not found` });
+    }
+
+    if (grn.status !== 'Draft' && grn.status !== 'ReturnedForCorrection') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot edit Goods Received Note in status '${grn.status}'. Only 'Draft' or 'ReturnedForCorrection' can be modified.`,
+      });
+    }
+
+    const po = purchaseOrders.find((p) => p.id === grn.purchaseOrderId);
+    if (!po) {
+      return res.status(400).json({ success: false, message: 'Associated Purchase Order not found' });
+    }
+
+    const {
+      warehouseId,
+      warehouseName,
+      storageLocation,
+      deliveryChallanNumber,
+      deliveryChallanDate,
+      vehicleNumber,
+      deliveredBy,
+      grnDate,
+      generalRemarks,
+      items,
+      inspectionChecklist,
+    } = req.body || {};
+
+    if (deliveryChallanNumber) grn.deliveryChallanNumber = String(deliveryChallanNumber).trim();
+    if (deliveryChallanDate) grn.deliveryChallanDate = String(deliveryChallanDate).trim();
+    if (vehicleNumber) grn.vehicleNumber = String(vehicleNumber).trim();
+    if (deliveredBy) grn.deliveredBy = String(deliveredBy).trim();
+    if (warehouseId) grn.warehouseId = String(warehouseId).trim();
+    if (warehouseName) grn.warehouseName = String(warehouseName).trim();
+    if (storageLocation) grn.storageLocation = String(storageLocation).trim();
+    if (grnDate) grn.grnDate = String(grnDate).trim();
+    if (generalRemarks !== undefined) grn.generalRemarks = generalRemarks ? String(generalRemarks).trim() : undefined;
+
+    if (items && Array.isArray(items) && items.length > 0) {
+      const updatedItems: GoodsReceivedItemRecord[] = [];
+      let totalDelivered = 0;
+      let totalAccepted = 0;
+      let totalRejected = 0;
+      let totalDamaged = 0;
+      let totalShort = 0;
+      let totalValue = 0;
+
+      for (const rawItem of items) {
+        const poItem = po.items.find(
+          (pi) => pi.id === rawItem.purchaseOrderItemId || pi.materialId === rawItem.materialId
+        );
+        if (!poItem) continue;
+
+        const delivered = Math.max(0, parseFloat(rawItem.deliveredQuantity) || 0);
+        const accepted = rawItem.acceptedQuantity !== undefined
+          ? Math.max(0, parseFloat(rawItem.acceptedQuantity) || 0)
+          : delivered;
+        const rejected = Math.max(0, parseFloat(rawItem.rejectedQuantity) || 0);
+        const damaged = Math.max(0, parseFloat(rawItem.damagedQuantity) || 0);
+        const short = Math.max(0, parseFloat(rawItem.shortQuantity) || 0);
+
+        if (Math.abs(delivered - (accepted + rejected)) > 0.01) {
+          return res.status(400).json({
+            success: false,
+            message: `Validation Error on item ${poItem.materialCode}: Delivered quantity (${delivered}) must equal accepted (${accepted}) + rejected (${rejected}).`,
+          });
+        }
+
+        if (accepted > poItem.outstandingQuantity) {
+          return res.status(400).json({
+            success: false,
+            message: `Over-Receipt Violation: Accepted quantity (${accepted}) exceeds PO outstanding balance (${poItem.outstandingQuantity}) for '${poItem.materialName}'.`,
+          });
+        }
+
+        const unitPrice = poItem.unitRate;
+        const totalAcceptedAmount = round2(accepted * unitPrice);
+
+        totalDelivered = round2(totalDelivered + delivered);
+        totalAccepted = round2(totalAccepted + accepted);
+        totalRejected = round2(totalRejected + rejected);
+        totalDamaged = round2(totalDamaged + damaged);
+        totalShort = round2(totalShort + short);
+        totalValue = round2(totalValue + totalAcceptedAmount);
+
+        updatedItems.push({
+          id: rawItem.id || `GRI-${crypto.randomBytes(4).toString('hex')}`,
+          purchaseOrderItemId: poItem.id,
+          materialId: poItem.materialId,
+          materialCode: poItem.materialCode,
+          materialName: poItem.materialName,
+          specification: poItem.specification,
+          unitId: poItem.unitId,
+          unitCode: poItem.unitCode,
+          orderedQuantity: poItem.orderedQuantity,
+          previouslyReceivedQuantity: poItem.receivedQuantity,
+          poOutstandingQuantity: poItem.outstandingQuantity,
+          deliveredQuantity: delivered,
+          acceptedQuantity: accepted,
+          rejectedQuantity: rejected,
+          damagedQuantity: damaged,
+          shortQuantity: short,
+          remarks: rawItem.remarks ? String(rawItem.remarks).trim() : undefined,
+          storageLocation: rawItem.storageLocation ? String(rawItem.storageLocation).trim() : grn.storageLocation,
+          unitPrice,
+          totalAcceptedAmount,
+        });
+      }
+
+      grn.items = updatedItems;
+      grn.totalDeliveredQuantity = totalDelivered;
+      grn.totalAcceptedQuantity = totalAccepted;
+      grn.totalRejectedQuantity = totalRejected;
+      grn.totalDamagedQuantity = totalDamaged;
+      grn.totalShortQuantity = totalShort;
+      grn.totalAcceptedValue = totalValue;
+    }
+
+    if (inspectionChecklist) {
+      grn.inspectionChecklist = {
+        ...grn.inspectionChecklist,
+        ...inspectionChecklist,
+      };
+    }
+
+    const nowUtc = new Date().toISOString();
+    grn.updatedAtUtc = nowUtc;
+    grn.auditTrail.push({
+      id: `GA-${crypto.randomBytes(4).toString('hex')}`,
+      grnId: grn.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'User',
+      action: 'Updated',
+      comments: 'Goods Received Note draft updated.',
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(grnsFile, grns);
+
+    return res.status(200).json({
+      success: true,
+      message: `Goods Received Note ${grn.grnNumber} updated successfully`,
+      data: grn,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/grns/:id/submit (Draft -> SubmittedForInspection)
+  router.post('/grns/:id/submit', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const user = req.user!;
+
+    const grn = grns.find((g) => g.id === req.params.id);
+    if (!grn) {
+      return res.status(404).json({ success: false, message: `Goods Received Note '${req.params.id}' was not found` });
+    }
+
+    if (grn.status !== 'Draft' && grn.status !== 'ReturnedForCorrection') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot submit GRN in status '${grn.status}'. Only 'Draft' or 'ReturnedForCorrection' can be submitted for inspection.`,
+      });
+    }
+
+    if (!grn.deliveryChallanNumber || !grn.deliveryChallanNumber.trim()) {
+      return res.status(400).json({ success: false, message: 'Delivery challan number is mandatory for inspection submission' });
+    }
+
+    if (grn.items.length === 0 || grn.totalDeliveredQuantity <= 0) {
+      return res.status(400).json({ success: false, message: 'Cannot submit a GRN with zero delivered physical items' });
+    }
+
+    const { comments } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    grn.status = 'SubmittedForInspection';
+    grn.updatedAtUtc = nowUtc;
+
+    grn.auditTrail.push({
+      id: `GA-${crypto.randomBytes(4).toString('hex')}`,
+      grnId: grn.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'SubmittedForInspection',
+      comments: comments ? String(comments).trim() : 'Physical delivery submitted for quality inspection.',
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(grnsFile, grns);
+
+    return res.status(200).json({
+      success: true,
+      message: `Goods Received Note ${grn.grnNumber} submitted for QA inspection`,
+      data: grn,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/grns/:id/inspect (Record SCM-F-01 QA Inspection & Quantities)
+  router.post('/grns/:id/inspect', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const user = req.user!;
+
+    const grn = grns.find((g) => g.id === req.params.id);
+    if (!grn) {
+      return res.status(404).json({ success: false, message: `Goods Received Note '${req.params.id}' was not found` });
+    }
+
+    if (grn.status !== 'SubmittedForInspection' && grn.status !== 'Draft') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot record inspection on GRN in status '${grn.status}'. Only 'SubmittedForInspection' or 'Draft' can be inspected.`,
+      });
+    }
+
+    const po = purchaseOrders.find((p) => p.id === grn.purchaseOrderId);
+    if (!po) {
+      return res.status(400).json({ success: false, message: 'Associated Purchase Order not found' });
+    }
+
+    const { checklist, items, comments } = req.body || {};
+
+    if (checklist) {
+      if (checklist.debitNoteRequired && (!checklist.debitNoteReason || !String(checklist.debitNoteReason).trim())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Debit note reason is mandatory when debit note recommendation is flagged',
+        });
+      }
+
+      grn.inspectionChecklist = {
+        ...grn.inspectionChecklist,
+        ...checklist,
+      };
+    }
+
+    if (items && Array.isArray(items) && items.length > 0) {
+      let totalDelivered = 0;
+      let totalAccepted = 0;
+      let totalRejected = 0;
+      let totalDamaged = 0;
+      let totalShort = 0;
+      let totalValue = 0;
+
+      for (const updatedItem of items) {
+        const existing = grn.items.find(
+          (gi) => gi.id === updatedItem.id || gi.purchaseOrderItemId === updatedItem.purchaseOrderItemId
+        );
+        const poItem = po.items.find((pi) => pi.id === (existing?.purchaseOrderItemId || updatedItem.purchaseOrderItemId));
+
+        if (!existing || !poItem) continue;
+
+        const delivered = Math.max(0, parseFloat(updatedItem.deliveredQuantity ?? existing.deliveredQuantity) || 0);
+        const accepted = Math.max(0, parseFloat(updatedItem.acceptedQuantity ?? existing.acceptedQuantity) || 0);
+        const rejected = Math.max(0, parseFloat(updatedItem.rejectedQuantity ?? existing.rejectedQuantity) || 0);
+        const damaged = Math.max(0, parseFloat(updatedItem.damagedQuantity ?? existing.damagedQuantity) || 0);
+        const short = Math.max(0, parseFloat(updatedItem.shortQuantity ?? existing.shortQuantity) || 0);
+
+        if (Math.abs(delivered - (accepted + rejected)) > 0.01) {
+          return res.status(400).json({
+            success: false,
+            message: `Delivered quantity (${delivered}) must equal accepted (${accepted}) + rejected (${rejected}) for item ${poItem.materialCode}`,
+          });
+        }
+
+        if (accepted > poItem.outstandingQuantity) {
+          return res.status(400).json({
+            success: false,
+            message: `Over-Receipt Violation: Accepted quantity (${accepted}) exceeds PO outstanding balance (${poItem.outstandingQuantity}) for '${poItem.materialName}'.`,
+          });
+        }
+
+        existing.deliveredQuantity = delivered;
+        existing.acceptedQuantity = accepted;
+        existing.rejectedQuantity = rejected;
+        existing.damagedQuantity = damaged;
+        existing.shortQuantity = short;
+        if (updatedItem.storageLocation) existing.storageLocation = String(updatedItem.storageLocation).trim();
+        if (updatedItem.remarks !== undefined) existing.remarks = updatedItem.remarks ? String(updatedItem.remarks).trim() : undefined;
+        existing.totalAcceptedAmount = round2(accepted * existing.unitPrice);
+
+        totalDelivered = round2(totalDelivered + delivered);
+        totalAccepted = round2(totalAccepted + accepted);
+        totalRejected = round2(totalRejected + rejected);
+        totalDamaged = round2(totalDamaged + damaged);
+        totalShort = round2(totalShort + short);
+        totalValue = round2(totalValue + existing.totalAcceptedAmount);
+      }
+
+      grn.totalDeliveredQuantity = totalDelivered;
+      grn.totalAcceptedQuantity = totalAccepted;
+      grn.totalRejectedQuantity = totalRejected;
+      grn.totalDamagedQuantity = totalDamaged;
+      grn.totalShortQuantity = totalShort;
+      grn.totalAcceptedValue = totalValue;
+
+      // Auto-flag discrepancy if rejected/damaged/short exists
+      if (totalRejected > 0 || totalDamaged > 0 || totalShort > 0) {
+        grn.inspectionChecklist.discrepancyIdentified = true;
+      }
+    }
+
+    const nowUtc = new Date().toISOString();
+    grn.status = 'Inspected';
+    grn.inspectedByUserId = user.sub;
+    grn.inspectedByName = user.fullName;
+    grn.inspectedAtUtc = nowUtc;
+    grn.updatedAtUtc = nowUtc;
+
+    grn.auditTrail.push({
+      id: `GA-${crypto.randomBytes(4).toString('hex')}`,
+      grnId: grn.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'QualityInspector',
+      action: 'Inspected',
+      comments: comments ? String(comments).trim() : `QA Inspection completed per SOP SCM-F-01. Accepted: ${grn.totalAcceptedQuantity}, Rejected: ${grn.totalRejectedQuantity}.`,
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(grnsFile, grns);
+
+    return res.status(200).json({
+      success: true,
+      message: `Goods Received Note ${grn.grnNumber} QA inspection recorded`,
+      data: grn,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/grns/:id/approve (Supervisory Dual-Control Approval)
+  router.post('/grns/:id/approve', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const user = req.user!;
+
+    const grn = grns.find((g) => g.id === req.params.id);
+    if (!grn) {
+      return res.status(404).json({ success: false, message: `Goods Received Note '${req.params.id}' was not found` });
+    }
+
+    if (!canUserAccessProject(user, grn.projectId)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You do not have approval authority over this project site' });
+    }
+
+    // Policy Rule: Dual-Control Approval (Receiver cannot approve their own GRN unless SuperAdmin)
+    if (grn.receivedByUserId === user.sub && !user.roles.includes('SuperAdmin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Dual-control policy violation: The receiving clerk who created this GRN cannot approve it. Requires independent store supervisor or manager approval.',
+      });
+    }
+
+    if (grn.status !== 'Inspected') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot approve GRN in status '${grn.status}'. Only inspected GRNs ('Inspected') can be approved.`,
+      });
+    }
+
+    const { comments } = req.body || {};
+    const nowUtc = new Date().toISOString();
+
+    grn.status = 'Approved';
+    grn.approvedByUserId = user.sub;
+    grn.approvedByName = user.fullName;
+    grn.approvedAtUtc = nowUtc;
+    grn.updatedAtUtc = nowUtc;
+
+    grn.auditTrail.push({
+      id: `GA-${crypto.randomBytes(4).toString('hex')}`,
+      grnId: grn.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles.find((r) => ['SuperAdmin', 'ProjectManager', 'InventoryManager'].includes(r)) || user.roles[0],
+      action: 'Approved',
+      comments: comments ? String(comments).trim() : 'Goods Received Note approved for inventory ledger posting.',
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(grnsFile, grns);
+
+    return res.status(200).json({
+      success: true,
+      message: `Goods Received Note ${grn.grnNumber} approved successfully`,
+      data: grn,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/grns/:id/reject (Rejection with justification)
+  router.post('/grns/:id/reject', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const user = req.user!;
+
+    const grn = grns.find((g) => g.id === req.params.id);
+    if (!grn) {
+      return res.status(404).json({ success: false, message: `Goods Received Note '${req.params.id}' was not found` });
+    }
+
+    if (grn.status !== 'SubmittedForInspection' && grn.status !== 'Inspected') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot reject GRN in status '${grn.status}'. Only 'SubmittedForInspection' or 'Inspected' can be rejected.`,
+      });
+    }
+
+    const { reason, comments } = req.body || {};
+    const rejectionReason = String(reason || comments || '').trim();
+
+    if (!rejectionReason || rejectionReason.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rejection reason is mandatory (minimum 3 characters). Please detail why the delivery intake is rejected.',
+      });
+    }
+
+    const nowUtc = new Date().toISOString();
+    grn.status = 'Rejected';
+    grn.rejectionReason = rejectionReason;
+    grn.updatedAtUtc = nowUtc;
+
+    grn.auditTrail.push({
+      id: `GA-${crypto.randomBytes(4).toString('hex')}`,
+      grnId: grn.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'User',
+      action: 'Rejected',
+      comments: rejectionReason,
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(grnsFile, grns);
+
+    return res.status(200).json({
+      success: true,
+      message: `Goods Received Note ${grn.grnNumber} has been rejected`,
+      data: grn,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/grns/:id/return-for-correction
+  router.post('/grns/:id/return-for-correction', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const user = req.user!;
+
+    const grn = grns.find((g) => g.id === req.params.id);
+    if (!grn) {
+      return res.status(404).json({ success: false, message: `Goods Received Note '${req.params.id}' was not found` });
+    }
+
+    if (grn.status !== 'SubmittedForInspection' && grn.status !== 'Inspected') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot return GRN in status '${grn.status}'. Only 'SubmittedForInspection' or 'Inspected' can be returned for correction.`,
+      });
+    }
+
+    const { notes, comments, correctionNotes } = req.body || {};
+    const feedback = String(notes || comments || correctionNotes || '').trim();
+
+    if (!feedback || feedback.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Correction notes are mandatory. Detail what needs to be revised by the receiving clerk.',
+      });
+    }
+
+    const nowUtc = new Date().toISOString();
+    grn.status = 'ReturnedForCorrection';
+    grn.correctionNotes = feedback;
+    grn.updatedAtUtc = nowUtc;
+
+    grn.auditTrail.push({
+      id: `GA-${crypto.randomBytes(4).toString('hex')}`,
+      grnId: grn.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'User',
+      action: 'ReturnedForCorrection',
+      comments: feedback,
+      timestampUtc: nowUtc,
+    });
+
+    writeJsonAtomic(grnsFile, grns);
+
+    return res.status(200).json({
+      success: true,
+      message: `Goods Received Note ${grn.grnNumber} returned for correction`,
+      data: grn,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // POST /api/grns/:id/post (Post to Receipt Ledger & Update Purchase Order)
+  router.post('/api/grns/:id/post', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']), (req: AuthenticatedRequest, res: Response) => {
+    // Also handled by standard mount
+  });
+
+  router.post('/grns/:id/post', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const receiptLedger = readJsonSafe<ReceiptLedgerRecord[]>(receiptLedgerFile, []);
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const inventoryBalances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, []);
+    const projects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
+    const user = req.user!;
+
+    const grn = grns.find((g) => g.id === req.params.id);
+    if (!grn) {
+      return res.status(404).json({ success: false, message: `Goods Received Note '${req.params.id}' was not found` });
+    }
+
+    if (grn.status === 'Posted') {
+      return res.status(400).json({
+        success: false,
+        message: `Goods Received Note ${grn.grnNumber} is already posted. Posting is an idempotent terminal action.`,
+      });
+    }
+
+    if (grn.status !== 'Approved') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot post GRN in status '${grn.status}'. Only 'Approved' GRNs can be posted to the receipt ledger.`,
+      });
+    }
+
+    const po = purchaseOrders.find((p) => p.id === grn.purchaseOrderId);
+    if (!po) {
+      return res.status(400).json({ success: false, message: 'Associated Purchase Order was not found' });
+    }
+
+    const nowUtc = new Date().toISOString();
+
+    // Verify no line exceeds outstanding balance before applying changes
+    for (const grnItem of grn.items) {
+      const poItem = po.items.find((pi) => pi.id === grnItem.purchaseOrderItemId);
+      if (!poItem) {
+        return res.status(400).json({
+          success: false,
+          message: `PO line item not found for material '${grnItem.materialCode}'`,
+        });
+      }
+      if (grnItem.acceptedQuantity > poItem.outstandingQuantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot post: Accepted quantity (${grnItem.acceptedQuantity}) exceeds available PO balance (${poItem.outstandingQuantity}) for material '${poItem.materialName}'.`,
+        });
+      }
+    }
+
+    // Cost Validation: Reject or hold posting if any accepted line lacks a positive unit rate
+    for (const grnItem of grn.items) {
+      if (grnItem.acceptedQuantity > 0) {
+        if (!grnItem.unitPrice || grnItem.unitPrice <= 0 || isNaN(grnItem.unitPrice)) {
+          return res.status(400).json({
+            success: false,
+            message: `Cannot value inventory posting: Material '${grnItem.materialCode}' (${grnItem.materialName}) has non-positive or invalid unit cost (${grnItem.unitPrice}). Posting is held safely to prevent corrupting inventory valuation.`,
+          });
+        }
+      }
+    }
+
+    // Apply updates to PO items & build receipt ledger records
+    for (const grnItem of grn.items) {
+      const poItem = po.items.find((pi) => pi.id === grnItem.purchaseOrderItemId)!;
+
+      poItem.receivedQuantity = round2(poItem.receivedQuantity + grnItem.acceptedQuantity);
+      poItem.outstandingQuantity = round2(Math.max(0, poItem.orderedQuantity - poItem.receivedQuantity));
+
+      // Append to receipt ledger if acceptedQuantity > 0
+      if (grnItem.acceptedQuantity > 0) {
+        const ledgerEntry: ReceiptLedgerRecord = {
+          id: `RCPT-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`,
+          grnId: grn.id,
+          grnNumber: grn.grnNumber,
+          purchaseOrderId: po.id,
+          purchaseOrderNumber: po.poNumber,
+          supplierId: grn.supplierId,
+          supplierName: grn.supplierName,
+          projectId: grn.projectId,
+          warehouseId: grn.warehouseId,
+          materialId: grnItem.materialId,
+          materialCode: grnItem.materialCode,
+          materialName: grnItem.materialName,
+          unitCode: grnItem.unitCode,
+          acceptedQuantity: grnItem.acceptedQuantity,
+          unitPrice: grnItem.unitPrice,
+          totalAmount: grnItem.totalAcceptedAmount,
+          storageLocation: grnItem.storageLocation || grn.storageLocation,
+          deliveryChallanNumber: grn.deliveryChallanNumber,
+          postedAtUtc: nowUtc,
+          postedByUserId: user.sub,
+          postedByName: user.fullName,
+          reconciledWithInventoryLedger: true,
+        };
+        receiptLedger.unshift(ledgerEntry);
+      }
+    }
+
+    // Execute Authoritative Stock Ledger & Moving WAC Balance Update
+    const postingResult = postGrnToInventoryLedger(
+      grn,
+      po,
+      user,
+      nowUtc,
+      stockLedger,
+      inventoryBalances,
+      materials,
+      projects
+    );
+
+    if (!postingResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: postingResult.error || 'Inventory posting failed.',
+      });
+    }
+
+    // Re-evaluate PO overall status
+    const allLinesFulfilled = po.items.every((pi) => pi.receivedQuantity >= pi.orderedQuantity);
+    const anyReceived = po.items.some((pi) => pi.receivedQuantity > 0);
+
+    const previousPoStatus = po.status;
+    if (allLinesFulfilled) {
+      po.status = 'FullyReceived';
+    } else if (anyReceived) {
+      po.status = 'PartiallyReceived';
+    }
+
+    // Also update PO header level received/outstanding fields if present
+    po.receivedQuantity = round2(po.items.reduce((s, i) => s + i.receivedQuantity, 0));
+    po.outstandingQuantity = round2(po.items.reduce((s, i) => s + i.outstandingQuantity, 0));
+    po.updatedAtUtc = nowUtc;
+
+    po.approvalHistory.push({
+      id: `PO-HIS-${crypto.randomBytes(4).toString('hex')}`,
+      poId: po.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: (po.status === 'FullyReceived' ? 'FullyReceived' : 'PartiallyReceived') as any,
+      comments: `Goods receipt posted via ${grn.grnNumber}. Total accepted value: $${grn.totalAcceptedValue}. Status transitioned from ${previousPoStatus} to ${po.status}.`,
+      timestampUtc: nowUtc,
+    });
+
+    // Finalize GRN
+    grn.status = 'Posted';
+    grn.postedByUserId = user.sub;
+    grn.postedByName = user.fullName;
+    grn.postedAtUtc = nowUtc;
+    grn.updatedAtUtc = nowUtc;
+
+    grn.auditTrail.push({
+      id: `GA-${crypto.randomBytes(4).toString('hex')}`,
+      grnId: grn.id,
+      actorUserId: user.sub,
+      actorName: user.fullName,
+      actorRole: user.roles[0] || 'Storekeeper',
+      action: 'Posted',
+      comments: `GRN posted to durable receipt ledger & stock ledger. Purchase Order ${po.poNumber} status updated to ${po.status}.`,
+      timestampUtc: nowUtc,
+    });
+
+    // Atomic persistence across all 5 aggregate files
+    writeJsonAtomic(grnsFile, grns);
+    writeJsonAtomic(purchaseOrdersFile, purchaseOrders);
+    writeJsonAtomic(receiptLedgerFile, receiptLedger);
+    writeJsonAtomic(stockLedgerFile, stockLedger);
+    writeJsonAtomic(inventoryBalancesFile, inventoryBalances);
+
+    return res.status(200).json({
+      success: true,
+      message: `Goods Received Note ${grn.grnNumber} posted successfully. Inventory balances and authoritative stock ledger updated with moving WAC.`,
+      data: grn,
+      purchaseOrderStatus: po.status,
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // GET /api/purchase-orders/:id/receipts (PO Receipt Integration Endpoint)
+  router.get('/purchase-orders/:id/receipts', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const receiptLedger = readJsonSafe<ReceiptLedgerRecord[]>(receiptLedgerFile, []);
+    const user = req.user!;
+
+    const po = purchaseOrders.find((p) => p.id === req.params.id || p.poNumber === req.params.id);
+    if (!po) {
+      return res.status(404).json({
+        success: false,
+        message: `Purchase Order '${req.params.id}' was not found`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    if (!canUserAccessProject(user, po.projectId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have access to purchase orders for this project site',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    // Filter GRNs and receipts linked to this PO
+    const linkedGrns = grns.filter((g) => g.purchaseOrderId === po.id || g.purchaseOrderNumber === po.poNumber);
+    const linkedReceipts = receiptLedger.filter((r) => r.purchaseOrderId === po.id || r.purchaseOrderNumber === po.poNumber);
+
+    const itemReceiptSummaries = po.items.map((pi) => {
+      const itemReceipts = linkedReceipts.filter((r) => r.materialId === pi.materialId);
+      const cumulativeReceived = round2(itemReceipts.reduce((sum, r) => sum + r.acceptedQuantity, 0));
+      return {
+        purchaseOrderItemId: pi.id,
+        materialId: pi.materialId,
+        materialCode: pi.materialCode,
+        materialName: pi.materialName,
+        unitCode: pi.unitCode,
+        orderedQuantity: pi.orderedQuantity,
+        receivedQuantity: pi.receivedQuantity,
+        ledgerCumulativeReceived: cumulativeReceived,
+        outstandingQuantity: pi.outstandingQuantity,
+        unitRate: pi.unitRate,
+        isFullyReceived: pi.receivedQuantity >= pi.orderedQuantity,
+      };
+    });
+
+    const totalOrdered = round2(po.items.reduce((s, i) => s + i.orderedQuantity, 0));
+    const totalReceived = round2(po.items.reduce((s, i) => s + i.receivedQuantity, 0));
+    const totalOutstanding = round2(po.items.reduce((s, i) => s + i.outstandingQuantity, 0));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        purchaseOrderId: po.id,
+        purchaseOrderNumber: po.poNumber,
+        status: po.status,
+        supplierName: po.supplierName,
+        projectName: po.projectName,
+        totalOrderedQuantity: totalOrdered,
+        totalReceivedQuantity: totalReceived,
+        totalOutstandingQuantity: totalOutstanding,
+        grnCount: linkedGrns.length,
+        postedGrnCount: linkedGrns.filter((g) => g.status === 'Posted').length,
+        itemSummaries: itemReceiptSummaries,
+        grns: linkedGrns,
+        receipts: linkedReceipts,
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // ------------------------------------------------------------------------
+  // API: INVENTORY BALANCES, STOCK LEDGER & WEIGHTED-AVERAGE COSTING
+  // ------------------------------------------------------------------------
+
+  // GET /api/inventory/balances (Paginated & Filtered Balances by Location)
+  router.get('/inventory/balances', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const balances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, []);
+    const user = req.user!;
+
+    const { materialId, warehouseId, projectId, search, status, page, pageSize } = req.query;
+
+    // Filter by user location scope
+    let filtered = balances.filter((b) => canUserAccessLocation(user, b.projectId, b.warehouseId));
+
+    if (materialId && typeof materialId === 'string' && materialId !== 'ALL') {
+      filtered = filtered.filter((b) => b.materialId === materialId || b.materialCode === materialId);
+    }
+
+    if (warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL') {
+      filtered = filtered.filter((b) => b.warehouseId === warehouseId);
+    }
+
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      filtered = filtered.filter((b) => b.projectId === projectId);
+    }
+
+    if (search && typeof search === 'string') {
+      const term = search.trim().toUpperCase();
+      filtered = filtered.filter(
+        (b) =>
+          b.materialCode.toUpperCase().includes(term) ||
+          b.materialName.toUpperCase().includes(term) ||
+          (b.categoryName && b.categoryName.toUpperCase().includes(term)) ||
+          b.warehouseName.toUpperCase().includes(term) ||
+          b.projectName.toUpperCase().includes(term)
+      );
+    }
+
+    // Attach master global stock thresholds (explicitly noted as master global)
+    const enriched = filtered.map((b) => {
+      const mat = materials.find((m) => m.id === b.materialId);
+      const globalMin = mat?.minimumStockLevel;
+      const globalReorder = mat?.reorderLevel;
+      const isLowStock = globalMin !== undefined && b.quantityOnHand <= globalMin;
+      return {
+        ...b,
+        globalMinimumStockLevel: globalMin,
+        globalReorderLevel: globalReorder,
+        isLowStock,
+      };
+    });
+
+    let resultItems = enriched;
+    if (status && typeof status === 'string' && status !== 'ALL') {
+      if (status === 'IN_STOCK') {
+        resultItems = resultItems.filter((b) => b.quantityOnHand > 0);
+      } else if (status === 'LOW_STOCK') {
+        resultItems = resultItems.filter((b) => b.isLowStock);
+      } else if (status === 'OUT_OF_STOCK') {
+        resultItems = resultItems.filter((b) => b.quantityOnHand <= 0);
+      }
+    }
+
+    // Sort by material code, warehouse name
+    resultItems.sort((a, b) => a.materialCode.localeCompare(b.materialCode) || a.warehouseName.localeCompare(b.warehouseName));
+
+    const pageIndex = Math.max(1, parseInt(page as string, 10) || 1);
+    const size = Math.max(1, parseInt(pageSize as string, 10) || 20);
+    const totalCount = resultItems.length;
+    const totalPages = Math.ceil(totalCount / size);
+    const paged = resultItems.slice((pageIndex - 1) * size, pageIndex * size);
+
+    const distinctMatIds = new Set(filtered.map((b) => b.materialId));
+    const locationKeys = new Set(filtered.map((b) => `${b.warehouseId}:${b.projectId}`));
+
+    const metrics = {
+      totalMaterials: distinctMatIds.size,
+      totalLocations: locationKeys.size,
+      totalInventoryValue: round2(filtered.reduce((sum, b) => sum + (b.inventoryValue || 0), 0)),
+      totalQuantityOnHand: round2(filtered.reduce((sum, b) => sum + (b.quantityOnHand || 0), 0)),
+      lowStockCount: enriched.filter((b) => b.isLowStock).length,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: paged,
+        pageIndex,
+        pageSize: size,
+        totalCount,
+        totalPages,
+        metrics,
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/inventory/balances/:materialId (Location breakdown for single material)
+  router.get('/inventory/balances/:materialId', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const balances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, []);
+    const user = req.user!;
+
+    const mat = materials.find((m) => m.id === req.params.materialId || m.itemCode === req.params.materialId);
+    const materialId = mat ? mat.id : req.params.materialId;
+
+    const matching = balances.filter(
+      (b) =>
+        (b.materialId === materialId || b.materialCode === req.params.materialId) &&
+        canUserAccessLocation(user, b.projectId, b.warehouseId)
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: matching,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/inventory/ledger (Authoritative Append-Only Transaction Ledger)
+  router.get('/inventory/ledger', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const user = req.user!;
+
+    const {
+      materialId,
+      warehouseId,
+      projectId,
+      transactionType,
+      search,
+      referenceNumber,
+      startDate,
+      endDate,
+      page,
+      pageSize,
+    } = req.query;
+
+    let filtered = stockLedger.filter((e) => canUserAccessLocation(user, e.projectId, e.warehouseId));
+
+    if (materialId && typeof materialId === 'string' && materialId !== 'ALL') {
+      filtered = filtered.filter((e) => e.materialId === materialId || e.materialCode === materialId);
+    }
+
+    if (warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL') {
+      filtered = filtered.filter((e) => e.warehouseId === warehouseId);
+    }
+
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      filtered = filtered.filter((e) => e.projectId === projectId);
+    }
+
+    if (transactionType && typeof transactionType === 'string' && transactionType !== 'ALL') {
+      filtered = filtered.filter((e) => e.transactionType === transactionType);
+    }
+
+    if (referenceNumber && typeof referenceNumber === 'string') {
+      filtered = filtered.filter((e) => e.referenceNumber.toUpperCase().includes(referenceNumber.trim().toUpperCase()));
+    }
+
+    if (startDate && typeof startDate === 'string') {
+      filtered = filtered.filter((e) => e.transactionDate >= startDate);
+    }
+
+    if (endDate && typeof endDate === 'string') {
+      filtered = filtered.filter((e) => e.transactionDate <= endDate);
+    }
+
+    if (search && typeof search === 'string') {
+      const term = search.trim().toUpperCase();
+      filtered = filtered.filter(
+        (e) =>
+          e.referenceNumber.toUpperCase().includes(term) ||
+          e.sourceDocumentNumber.toUpperCase().includes(term) ||
+          e.materialCode.toUpperCase().includes(term) ||
+          e.materialName.toUpperCase().includes(term) ||
+          e.warehouseName.toUpperCase().includes(term) ||
+          e.projectName.toUpperCase().includes(term) ||
+          (e.remarks && e.remarks.toUpperCase().includes(term))
+      );
+    }
+
+    // Chronological order: newest transactions first
+    filtered.sort((a, b) => new Date(b.timestampUtc).getTime() - new Date(a.timestampUtc).getTime());
+
+    const pageIndex = Math.max(1, parseInt(page as string, 10) || 1);
+    const size = Math.max(1, parseInt(pageSize as string, 10) || 20);
+    const totalCount = filtered.length;
+    const totalPages = Math.ceil(totalCount / size);
+    const paged = filtered.slice((pageIndex - 1) * size, pageIndex * size);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: paged,
+        pageIndex,
+        pageSize: size,
+        totalCount,
+        totalPages,
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/inventory/ledger/:id (Single Transaction Details)
+  router.get('/inventory/ledger/:id', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const user = req.user!;
+
+    const entry = stockLedger.find((e) => e.id === req.params.id || e.referenceNumber === req.params.id);
+    if (!entry) {
+      return res.status(404).json({
+        success: false,
+        message: `Stock ledger transaction '${req.params.id}' was not found`,
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    if (!canUserAccessLocation(user, entry.projectId, entry.warehouseId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to view stock ledger entries for this location',
+        timestampUtc: new Date().toISOString(),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: entry,
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // GET /api/inventory/valuation (Moving WAC Valuation Grouped Summaries)
+  router.get('/inventory/valuation', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+    const balances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const user = req.user!;
+    const { warehouseId, projectId } = req.query;
+
+    let filtered = balances.filter((b) => canUserAccessLocation(user, b.projectId, b.warehouseId));
+
+    if (warehouseId && typeof warehouseId === 'string' && warehouseId !== 'ALL') {
+      filtered = filtered.filter((b) => b.warehouseId === warehouseId);
+    }
+
+    if (projectId && typeof projectId === 'string' && projectId !== 'ALL') {
+      filtered = filtered.filter((b) => b.projectId === projectId);
+    }
+
+    // Group By Material
+    const materialMap = new Map<string, {
+      materialId: string;
+      materialCode: string;
+      materialName: string;
+      categoryName: string;
+      unitCode: string;
+      totalQuantity: number;
+      totalValue: number;
+      locationCount: number;
+    }>();
+
+    for (const b of filtered) {
+      let g = materialMap.get(b.materialId);
+      if (!g) {
+        g = {
+          materialId: b.materialId,
+          materialCode: b.materialCode,
+          materialName: b.materialName,
+          categoryName: b.categoryName || 'General Inventory',
+          unitCode: b.unitCode,
+          totalQuantity: 0,
+          totalValue: 0,
+          locationCount: 0,
+        };
+        materialMap.set(b.materialId, g);
+      }
+      g.totalQuantity = round2(g.totalQuantity + b.quantityOnHand);
+      g.totalValue = round2(g.totalValue + b.inventoryValue);
+      g.locationCount++;
+    }
+
+    const byMaterial = Array.from(materialMap.values()).map((g) => ({
+      ...g,
+      averageCost: g.totalQuantity > 0 ? round4(g.totalValue / g.totalQuantity) : 0,
+    })).sort((a, b) => b.totalValue - a.totalValue);
+
+    // Group By Warehouse
+    const warehouseMap = new Map<string, {
+      locationId: string;
+      locationName: string;
+      locationType: 'Warehouse' | 'Project';
+      itemCount: number;
+      totalQuantity: number;
+      totalValue: number;
+    }>();
+
+    for (const b of filtered) {
+      let w = warehouseMap.get(b.warehouseId);
+      if (!w) {
+        w = {
+          locationId: b.warehouseId,
+          locationName: b.warehouseName,
+          locationType: 'Warehouse',
+          itemCount: 0,
+          totalQuantity: 0,
+          totalValue: 0,
+        };
+        warehouseMap.set(b.warehouseId, w);
+      }
+      w.itemCount++;
+      w.totalQuantity = round2(w.totalQuantity + b.quantityOnHand);
+      w.totalValue = round2(w.totalValue + b.inventoryValue);
+    }
+
+    // Group By Project
+    const projectMap = new Map<string, {
+      locationId: string;
+      locationName: string;
+      locationType: 'Warehouse' | 'Project';
+      itemCount: number;
+      totalQuantity: number;
+      totalValue: number;
+    }>();
+
+    for (const b of filtered) {
+      let p = projectMap.get(b.projectId);
+      if (!p) {
+        p = {
+          locationId: b.projectId,
+          locationName: b.projectName,
+          locationType: 'Project',
+          itemCount: 0,
+          totalQuantity: 0,
+          totalValue: 0,
+        };
+        projectMap.set(b.projectId, p);
+      }
+      p.itemCount++;
+      p.totalQuantity = round2(p.totalQuantity + b.quantityOnHand);
+      p.totalValue = round2(p.totalValue + b.inventoryValue);
+    }
+
+    const nowUtc = new Date().toISOString();
+    const summary = {
+      totalInventoryValue: round2(filtered.reduce((sum, b) => sum + b.inventoryValue, 0)),
+      totalQuantityOnHand: round2(filtered.reduce((sum, b) => sum + b.quantityOnHand, 0)),
+      distinctMaterials: materialMap.size,
+      activeLocations: warehouseMap.size,
+      asOfTimestampUtc: nowUtc,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        byMaterial,
+        byWarehouse: Array.from(warehouseMap.values()),
+        byProject: Array.from(projectMap.values()),
+        summary,
+      },
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // GET /api/inventory/reconciliation (Audit Comparison: GRNs vs Ledger vs Balances)
+  router.get('/inventory/reconciliation', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager', 'AccountsOfficer', 'ProjectManager']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const balances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const receiptLedger = readJsonSafe<ReceiptLedgerRecord[]>(receiptLedgerFile, []);
+    const user = req.user!;
+
+    const accessibleGrns = grns.filter((g) => canUserAccessLocation(user, g.projectId, g.warehouseId));
+    const accessibleLedger = stockLedger.filter((e) => canUserAccessLocation(user, e.projectId, e.warehouseId));
+    const accessibleBalances = balances.filter((b) => canUserAccessLocation(user, b.projectId, b.warehouseId));
+
+    const grnVsLedgerDiscrepancies: any[] = [];
+    const ledgerVsBalanceDiscrepancies: any[] = [];
+
+    // Check 1: Every accepted line on a posted GRN must have a corresponding stock ledger entry
+    for (const grn of accessibleGrns) {
+      if (grn.status !== 'Posted') continue;
+      for (const item of grn.items) {
+        if (item.acceptedQuantity <= 0) continue;
+        const idempotencyKey = `GRN_${grn.id}_ITEM_${item.id}`;
+        const hasEntry = accessibleLedger.some((e) => e.idempotencyKey === idempotencyKey);
+        if (!hasEntry) {
+          grnVsLedgerDiscrepancies.push({
+            id: `DISC-GRN-${item.id}`,
+            type: 'UNPOSTED_RECEIPT',
+            description: `Accepted delivery of ${item.acceptedQuantity} ${item.unitCode} on ${grn.grnNumber} is not recorded in the stock ledger.`,
+            sourceReference: grn.grnNumber,
+            materialCode: item.materialCode,
+            location: grn.warehouseName || grn.warehouseId,
+            expectedValue: item.acceptedQuantity,
+            actualValue: 0,
+            canAutoRecover: true,
+          });
+        }
+      }
+    }
+
+    // Check 2: Sum of signed ledger quantities must equal balance on hand
+    const ledgerSums = new Map<string, { qty: number; value: number; materialCode: string; location: string }>();
+    for (const e of accessibleLedger) {
+      const key = `${e.materialId}_${e.warehouseId}_${e.projectId}`;
+      const curr = ledgerSums.get(key) || { qty: 0, value: 0, materialCode: e.materialCode, location: `${e.warehouseName} / ${e.projectName}` };
+      curr.qty = round2(curr.qty + e.signedQuantity);
+      curr.value = round2(curr.value + e.transactionValue);
+      ledgerSums.set(key, curr);
+    }
+
+    for (const [key, lSum] of ledgerSums.entries()) {
+      const parts = key.split('_');
+      const b = accessibleBalances.find((b) => b.materialId === parts[0] && b.warehouseId === parts[1] && b.projectId === parts[2]);
+      const storedOnHand = b ? b.quantityOnHand : 0;
+      if (Math.abs(lSum.qty - storedOnHand) > 0.001) {
+        ledgerVsBalanceDiscrepancies.push({
+          id: `DISC-BAL-${key}`,
+          type: 'QUANTITY_MISMATCH',
+          description: `Cumulative ledger movements total ${lSum.qty}, but stored balance is ${storedOnHand}.`,
+          sourceReference: `Location Balance: ${key}`,
+          materialCode: lSum.materialCode,
+          location: lSum.location,
+          expectedValue: lSum.qty,
+          actualValue: storedOnHand,
+          canAutoRecover: true,
+        });
+      }
+    }
+
+    const unreconciledReceipts = receiptLedger.filter((r) => !r.reconciledWithInventoryLedger && canUserAccessLocation(user, r.projectId, r.warehouseId));
+    const totalDiscrepancies = grnVsLedgerDiscrepancies.length + ledgerVsBalanceDiscrepancies.length + unreconciledReceipts.length;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        isReconciled: totalDiscrepancies === 0,
+        totalDiscrepancies,
+        grnVsLedgerDiscrepancies,
+        ledgerVsBalanceDiscrepancies,
+        unreconciledReceiptCount: unreconciledReceipts.length,
+        lastReconciledAtUtc: new Date().toISOString(),
+      },
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // POST /api/inventory/reconciliation/recover (Idempotent Recovery of Unreconciled Receipts)
+  router.post('/inventory/reconciliation/recover', authMiddleware, requireRole(['SuperAdmin', 'InventoryManager']), (req: AuthenticatedRequest, res: Response) => {
+    const grns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+    const purchaseOrders = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+    const receiptLedger = readJsonSafe<ReceiptLedgerRecord[]>(receiptLedgerFile, []);
+    const stockLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+    const inventoryBalances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+    const materials = readJsonSafe<MaterialRecord[]>(materialsFile, []);
+    const projects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
+    const user = req.user!;
+
+    let recoveredCount = 0;
+    const nowUtc = new Date().toISOString();
+
+    for (const rcpt of receiptLedger) {
+      if (rcpt.reconciledWithInventoryLedger) continue;
+      const grn = grns.find((g) => g.id === rcpt.grnId);
+      const po = purchaseOrders.find((p) => p.id === rcpt.purchaseOrderId);
+      if (grn && po && grn.status === 'Posted') {
+        const result = postGrnToInventoryLedger(
+          grn,
+          po,
+          user,
+          rcpt.postedAtUtc || nowUtc,
+          stockLedger,
+          inventoryBalances,
+          materials,
+          projects
+        );
+        if (result.success) {
+          rcpt.reconciledWithInventoryLedger = true;
+          recoveredCount += result.postedCount;
+        }
+      }
+    }
+
+    if (recoveredCount > 0) {
+      writeJsonAtomic(receiptLedgerFile, receiptLedger);
+      writeJsonAtomic(stockLedgerFile, stockLedger);
+      writeJsonAtomic(inventoryBalancesFile, inventoryBalances);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        recoveredCount,
+        message: recoveredCount > 0
+          ? `Successfully reconciled and posted ${recoveredCount} stock ledger transactions.`
+          : 'All inventory receipts are already fully reconciled with the authoritative stock ledger.',
+      },
+      timestampUtc: nowUtc,
+    });
+  });
+
+  // Immutable Protections: Direct CRUD editing or deletion of stock ledger or balances is prohibited
+  router.put(['/inventory/ledger/:id', '/inventory/balances/:id'], authMiddleware, (_req: Request, res: Response) => {
+    return res.status(405).json({
+      success: false,
+      message: 'Method Not Allowed (Policy Violation): Direct mutation of posted inventory transactions or balances is strictly prohibited. Use an authorized reversal or stock adjustment.',
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  router.delete(['/inventory/ledger/:id', '/inventory/balances/:id'], authMiddleware, (_req: Request, res: Response) => {
+    return res.status(405).json({
+      success: false,
+      message: 'Method Not Allowed (Policy Violation): Direct deletion of posted inventory transactions or balances is strictly prohibited. The stock ledger is immutable.',
+      timestampUtc: new Date().toISOString(),
+    });
+  });
+
+  // Startup Reconciliation: Automatically reconcile any legacy or pending posted receipts
+  try {
+    const startupReceipts = readJsonSafe<ReceiptLedgerRecord[]>(receiptLedgerFile, []);
+    const unreconciled = startupReceipts.filter((r) => !r.reconciledWithInventoryLedger);
+    if (unreconciled.length > 0) {
+      const startupGrns = readJsonSafe<GoodsReceivedNoteRecord[]>(grnsFile, []);
+      const startupPos = readJsonSafe<PurchaseOrderRecord[]>(purchaseOrdersFile, []);
+      const startupLedger = readJsonSafe<StockLedgerRecord[]>(stockLedgerFile, []);
+      const startupBalances = readJsonSafe<InventoryBalanceRecord[]>(inventoryBalancesFile, []);
+      const startupMaterials = readJsonSafe<MaterialRecord[]>(materialsFile, []);
+      const startupProjects = readJsonSafe<ProjectRecord[]>(projectsFile, defaultProjects);
+
+      let reconciledAny = false;
+      for (const rcpt of unreconciled) {
+        const grn = startupGrns.find((g) => g.id === rcpt.grnId && g.status === 'Posted');
+        const po = startupPos.find((p) => p.id === rcpt.purchaseOrderId);
+        if (grn && po) {
+          const systemUser: JwtPayload = {
+            sub: rcpt.postedByUserId || 'USR-ADMIN-01',
+            username: 'system',
+            email: 'system@constructcorp.com',
+            fullName: rcpt.postedByName || 'System Auto-Reconciliation',
+            roles: ['SuperAdmin', 'InventoryManager'],
+            projectScopes: ['*'],
+            warehouseScopes: ['*'],
+            iat: Math.floor(Date.now() / 1000),
+            exp: Math.floor(Date.now() / 1000) + 3600,
+            iss: JWT_ISSUER,
+            aud: JWT_AUDIENCE,
+          };
+          postGrnToInventoryLedger(
+            grn,
+            po,
+            systemUser,
+            rcpt.postedAtUtc || new Date().toISOString(),
+            startupLedger,
+            startupBalances,
+            startupMaterials,
+            startupProjects
+          );
+          rcpt.reconciledWithInventoryLedger = true;
+          reconciledAny = true;
+        }
+      }
+      if (reconciledAny) {
+        writeJsonAtomic(receiptLedgerFile, startupReceipts);
+        writeJsonAtomic(stockLedgerFile, startupLedger);
+        writeJsonAtomic(inventoryBalancesFile, startupBalances);
+        console.log(`[ConstructionStock] Reconciled ${unreconciled.length} pending stock receipts into authoritative ledger.`);
+      }
+    }
+  } catch (err) {
+    console.error('[ConstructionStock] Startup reconciliation error:', err);
+  }
 }
 
 // Mount router on both `/api` and `/api/v1` for maximum client compatibility
