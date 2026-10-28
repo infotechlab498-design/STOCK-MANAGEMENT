@@ -54,6 +54,7 @@ interface PurchaseOrderSummary {
   supplierName: string;
   expectedDeliveryDate?: string;
   status: string;
+  createGrnRoute?: string;
 }
 
 interface SystemSettingsRecord {
@@ -109,17 +110,15 @@ export const ModulePlaceholderPage: React.FC<ModulePlaceholderProps> = ({
         const res = await apiClient.get<WarehouseRecord[]>('/warehouses');
         setWarehouses(res.data || []);
       } else if (path === '/pending-deliveries') {
-        const res = await apiClient.get<{ items?: PurchaseOrderSummary[] } | PurchaseOrderSummary[]>(
-          '/purchase-orders'
+        const res = await apiClient.get<Array<{ purchaseOrder: PurchaseOrderSummary; createGrnRoute?: string }>>(
+          '/pending-deliveries'
         );
-        const payload = res.data;
-        const list: PurchaseOrderSummary[] = Array.isArray(payload)
-          ? payload
-          : payload?.items || [];
+        const rows = res.data || [];
         setPendingOrders(
-          list.filter((po: PurchaseOrderSummary) =>
-            ['Issued', 'Approved', 'PartiallyReceived', 'SentToSupplier'].includes(po.status)
-          )
+          rows.map((row) => ({
+            ...row.purchaseOrder,
+            createGrnRoute: row.createGrnRoute,
+          })) as PurchaseOrderSummary[]
         );
       } else if (path === '/settings') {
         const res = await apiClient.get<SystemSettingsRecord>('/settings');
@@ -188,9 +187,28 @@ export const ModulePlaceholderPage: React.FC<ModulePlaceholderProps> = ({
                 title="Material Categories & Taxonomy"
                 subtitle={`${categories.length} standardized construction material categories configured`}
                 actions={
-                  <Button variant="primary" size="sm" onClick={() => navigate('/materials')}>
-                    Open Material Master
-                  </Button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        const code = window.prompt('Category code (e.g. STEEL)');
+                        const name = window.prompt('Category name');
+                        if (!code || !name) return;
+                        try {
+                          await materialService.createCategory({ code, name });
+                          await loadModuleData();
+                        } catch (err: unknown) {
+                          setError(err instanceof Error ? err.message : 'Failed to create category');
+                        }
+                      }}
+                    >
+                      Add Category
+                    </Button>
+                    <Button variant="primary" size="sm" onClick={() => navigate('/materials')}>
+                      Open Material Master
+                    </Button>
+                  </div>
                 }
               >
                 <div style={{ overflowX: 'auto' }}>
@@ -438,9 +456,16 @@ export const ModulePlaceholderPage: React.FC<ModulePlaceholderProps> = ({
                           <td style={{ padding: '10px 12px' }}>
                             <Badge variant="warning">{po.status}</Badge>
                           </td>
-                          <td style={{ padding: '10px 12px' }}>
+                          <td style={{ padding: '10px 12px', display: 'flex', gap: 8 }}>
                             <Button variant="secondary" size="sm" onClick={() => navigate(`/purchase-orders/${po.id}`)}>
                               Inspect PO
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => navigate(po.createGrnRoute || `/grns/new?purchaseOrderId=${po.id}`)}
+                            >
+                              New GRN
                             </Button>
                           </td>
                         </tr>
@@ -455,6 +480,29 @@ export const ModulePlaceholderPage: React.FC<ModulePlaceholderProps> = ({
               <Card
                 title="Enterprise System Governance & Valuation Configuration"
                 subtitle="Enforced inventory accounting, security, and approval rules"
+                actions={
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const res = await apiClient.put<SystemSettingsRecord>('/settings', {
+                          negativeStockAllowed: settings.negativeStockAllowed,
+                          selfApprovalAllowed: settings.selfApprovalAllowed,
+                          requireGrnInspectionBeforePosting: settings.requireGrnInspectionBeforePosting,
+                          currency: settings.currency,
+                          jwtExpirySeconds: settings.jwtExpirySeconds,
+                          valuationDescription: settings.valuationDescription,
+                        });
+                        setSettings(res.data);
+                      } catch (err: unknown) {
+                        setError(err instanceof Error ? err.message : 'Failed to save settings');
+                      }
+                    }}
+                  >
+                    Save Settings
+                  </Button>
+                }
               >
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-4)' }}>
                   <div style={{ padding: 'var(--space-4)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-subtle)' }}>
@@ -475,10 +523,39 @@ export const ModulePlaceholderPage: React.FC<ModulePlaceholderProps> = ({
                       <CheckCircle2 size={16} style={{ color: 'var(--color-green-600)' }} />
                       Inventory Ledger Safeguards
                     </div>
-                    <ul style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-muted)', paddingLeft: 16 }}>
-                      <li>Negative Stock Permitted: <strong>{settings.negativeStockAllowed ? 'Yes' : 'No (Strictly Blocked)'}</strong></li>
-                      <li>Self-Approval Permitted: <strong>{settings.selfApprovalAllowed ? 'Yes' : 'No (Dual-Control Enforced)'}</strong></li>
-                      <li>GRN Inspection Required: <strong>{settings.requireGrnInspectionBeforePosting ? 'Mandatory' : 'Optional'}</strong></li>
+                    <ul style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-muted)', paddingLeft: 16, listStyle: 'none' }}>
+                      <li style={{ marginBottom: 8 }}>
+                        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={settings.negativeStockAllowed}
+                            onChange={(e) => setSettings({ ...settings, negativeStockAllowed: e.target.checked })}
+                          />
+                          Negative stock permitted
+                        </label>
+                      </li>
+                      <li style={{ marginBottom: 8 }}>
+                        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={settings.selfApprovalAllowed}
+                            onChange={(e) => setSettings({ ...settings, selfApprovalAllowed: e.target.checked })}
+                          />
+                          Self-approval permitted
+                        </label>
+                      </li>
+                      <li>
+                        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={settings.requireGrnInspectionBeforePosting}
+                            onChange={(e) =>
+                              setSettings({ ...settings, requireGrnInspectionBeforePosting: e.target.checked })
+                            }
+                          />
+                          GRN inspection required before posting
+                        </label>
+                      </li>
                     </ul>
                   </div>
                 </div>

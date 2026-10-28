@@ -17,6 +17,7 @@ import {
   NotificationSeverity,
 } from '../../services/api/notificationService';
 import { useAuth } from '../../app/AuthContext';
+import { useRealtime } from '../../app/RealtimeContext';
 
 export const NotificationBell: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -27,6 +28,7 @@ export const NotificationBell: React.FC = () => {
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { connected, subscribe } = useRealtime();
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -44,9 +46,16 @@ export const NotificationBell: React.FC = () => {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 45000);
+    // Keep polling as a fallback when the SignalR socket is down.
+    const interval = setInterval(fetchNotifications, connected ? 120000 : 45000);
     return () => clearInterval(interval);
-  }, [fetchNotifications, user?.id]);
+  }, [fetchNotifications, user?.id, connected]);
+
+  useEffect(() => {
+    return subscribe('notification.created', () => {
+      void fetchNotifications();
+    });
+  }, [subscribe, fetchNotifications]);
 
   useEffect(() => {
     if (open) {

@@ -58,6 +58,8 @@ export const Sidebar: React.FC = () => {
   const { user, hasRole } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [materialCount, setMaterialCount] = useState<string | undefined>();
+  const [pendingApprovals, setPendingApprovals] = useState<string | undefined>();
 
   // Track expanded groups
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
@@ -69,6 +71,31 @@ export const Sidebar: React.FC = () => {
     reports: false,
     admin: false,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { apiClient } = await import('../services/api/apiClient');
+        const summary = await apiClient.get<{
+          kpis?: { materialCount?: number; pendingRequisitionApprovalsCount?: number };
+        }>('/dashboard/summary');
+        if (cancelled) return;
+        const kpis = summary.data?.kpis;
+        if (typeof kpis?.materialCount === 'number') {
+          setMaterialCount(String(kpis.materialCount));
+        }
+        if (typeof kpis?.pendingRequisitionApprovalsCount === 'number') {
+          setPendingApprovals(String(kpis.pendingRequisitionApprovalsCount));
+        }
+      } catch {
+        // badges stay empty when offline
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   // Handle Escape key to close mobile drawer
   useEffect(() => {
@@ -105,7 +132,7 @@ export const Sidebar: React.FC = () => {
       title: 'Master Data',
       icon: <Boxes size={18} />,
       items: [
-        { to: '/materials', label: 'Material Master', badge: '640' },
+        { to: '/materials', label: 'Material Master', badge: materialCount },
         { to: '/material-categories', label: 'Categories' },
         { to: '/units', label: 'Units of Measure' },
         { to: '/suppliers', label: 'Suppliers' },
@@ -119,7 +146,7 @@ export const Sidebar: React.FC = () => {
       icon: <ClipboardList size={18} />,
       items: [
         { to: '/requisitions', label: 'Site Requisitions' },
-        { to: '/approvals', label: 'Pending Approvals', badge: '3' },
+        { to: '/approvals', label: 'Pending Approvals', badge: pendingApprovals },
       ],
       allowedRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper'],
     },

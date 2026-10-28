@@ -1,0 +1,12 @@
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\bin\Debug\net10.0\StructStock.Domain.deps.json
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\bin\Debug\net10.0\StructStock.Domain.dll
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\bin\Debug\net10.0\StructStock.Domain.pdb
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\obj\Debug\net10.0\StructStock.Domain.GeneratedMSBuildEditorConfig.editorconfig
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\obj\Debug\net10.0\StructStock.Domain.AssemblyInfoInputs.cache
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\obj\Debug\net10.0\StructStock.Domain.AssemblyInfo.cs
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\obj\Debug\net10.0\StructStock.Domain.csproj.CoreCompileInputs.cache
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\obj\Debug\net10.0\StructStock.Domain.sourcelink.json
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\obj\Debug\net10.0\StructStock.Domain.dll
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\obj\Debug\net10.0\refint\StructStock.Domain.dll
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\obj\Debug\net10.0\StructStock.Domain.pdb
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Domain\obj\Debug\net10.0\ref\StructStock.Domain.dll

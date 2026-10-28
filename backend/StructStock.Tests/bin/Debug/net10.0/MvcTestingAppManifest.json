@@ -1,0 +1,6 @@
+{
+  "StructStock.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "E:\\Stock Managment\\STOCK-MANAGEMENT\\backend\\StructStock.Api",
+  "StructStock.Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "E:\\Stock Managment\\STOCK-MANAGEMENT\\backend\\StructStock.Application",
+  "StructStock.Domain, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "E:\\Stock Managment\\STOCK-MANAGEMENT\\backend\\StructStock.Domain",
+  "StructStock.Infrastructure, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "E:\\Stock Managment\\STOCK-MANAGEMENT\\backend\\StructStock.Infrastructure"
+}

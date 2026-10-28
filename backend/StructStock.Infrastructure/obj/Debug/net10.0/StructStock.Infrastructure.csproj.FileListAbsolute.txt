@@ -1,0 +1,16 @@
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\bin\Debug\net10.0\StructStock.Infrastructure.deps.json
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\bin\Debug\net10.0\StructStock.Infrastructure.dll
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\bin\Debug\net10.0\StructStock.Infrastructure.pdb
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\bin\Debug\net10.0\StructStock.Domain.dll
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\bin\Debug\net10.0\StructStock.Domain.pdb
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\StructStock.Infrastructure.csproj.AssemblyReference.cache
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\StructStock.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\StructStock.Infrastructure.AssemblyInfoInputs.cache
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\StructStock.Infrastructure.AssemblyInfo.cs
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\StructStock.Infrastructure.csproj.CoreCompileInputs.cache
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\StructStock.Infrastructure.sourcelink.json
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\StructSt.FDBC3158.Up2Date
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\StructStock.Infrastructure.dll
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\refint\StructStock.Infrastructure.dll
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\StructStock.Infrastructure.pdb
+E:\Stock Managment\STOCK-MANAGEMENT\backend\StructStock.Infrastructure\obj\Debug\net10.0\ref\StructStock.Infrastructure.dll
