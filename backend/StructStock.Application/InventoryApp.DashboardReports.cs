@@ -71,63 +71,282 @@ public partial class InventoryApp
         return ApiResponse.Ok(new { readAll = true });
     }
 
-    public async Task<object> DashboardSummaryAsync(CancellationToken ct)
+    public async Task<object> DashboardSummaryAsync(
+        string? projectId,
+        string? warehouseId,
+        string? fromDate,
+        string? toDate,
+        CancellationToken ct)
     {
-        var balances = await _db.Balances.Include(b => b.Material).ThenInclude(m => m!.Category)
-            .Include(b => b.Warehouse).Include(b => b.Project).AsNoTracking().ToListAsync(ct);
-        balances = balances.Where(b => _me.CanAccessLocation(b.ProjectId, b.WarehouseId)).ToList();
-        var materials = await _db.Materials.AsNoTracking().CountAsync(ct);
-        var pendingReq = await _db.Requisitions.CountAsync(r => r.Status == "Submitted" && (_me.IsGlobal || _me.ProjectScopes.Contains(r.ProjectId)), ct);
-        var pendingPo = await _db.PurchaseOrders.CountAsync(p => p.Status == "PendingApproval" && (_me.IsGlobal || _me.ProjectScopes.Contains(p.ProjectId)), ct);
-        var pendingGrn = await _db.GoodsReceipts.CountAsync(g => g.Status == "SubmittedForInspection" || g.Status == "Inspected", ct);
-        var inTransit = balances.Sum(b => b.QuantityInTransit);
+        var balances = await _db.Balances
+            .Include(b => b.Material!).ThenInclude(m => m.Category)
+            .Include(b => b.Material!).ThenInclude(m => m.BaseUnit)
+            .Include(b => b.Warehouse)
+            .Include(b => b.Project)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        balances = balances
+            .Where(b => _me.CanAccessLocation(b.ProjectId, b.WarehouseId))
+            .Where(b => string.IsNullOrWhiteSpace(projectId) || projectId == "ALL" || b.ProjectId == projectId)
+            .Where(b => string.IsNullOrWhiteSpace(warehouseId) || warehouseId == "ALL" || b.WarehouseId == warehouseId)
+            .ToList();
+
+        DateTime? fromUtc = DateTime.TryParse(fromDate, out var fd) ? fd.ToUniversalTime() : null;
+        DateTime? toUtc = DateTime.TryParse(toDate, out var td) ? td.ToUniversalTime().Date.AddDays(1).AddTicks(-1) : null;
+
+        bool InDate(DateTime value) =>
+            (!fromUtc.HasValue || value >= fromUtc.Value) && (!toUtc.HasValue || value <= toUtc.Value);
+
+        var projects = await _db.Projects.AsNoTracking()
+            .Where(p => p.IsActive && (_me.IsGlobal || _me.ProjectScopes.Contains(p.Id)))
+            .OrderBy(p => p.Code)
+            .Select(p => new { id = p.Id, code = p.Code, name = p.Name, location = p.Location })
+            .ToListAsync(ct);
+
+        var warehouses = await _db.Warehouses.AsNoTracking()
+            .Where(w => w.IsActive && (_me.IsGlobal || _me.WarehouseScopes.Contains(w.Id)))
+            .OrderBy(w => w.Code)
+            .Select(w => new { id = w.Id, name = w.Name, projectId = w.ProjectId })
+            .ToListAsync(ct);
+
+        var pendingReq = await _db.Requisitions.CountAsync(r =>
+            r.Status == "Submitted" &&
+            (_me.IsGlobal || _me.ProjectScopes.Contains(r.ProjectId)) &&
+            (string.IsNullOrWhiteSpace(projectId) || projectId == "ALL" || r.ProjectId == projectId), ct);
+
+        var pendingPo = await _db.PurchaseOrders.CountAsync(p =>
+            p.Status == "PendingApproval" &&
+            (_me.IsGlobal || _me.ProjectScopes.Contains(p.ProjectId)) &&
+            (string.IsNullOrWhiteSpace(projectId) || projectId == "ALL" || p.ProjectId == projectId), ct);
+
+        var pendingGrn = await _db.GoodsReceipts.CountAsync(g =>
+            (g.Status == "SubmittedForInspection" || g.Status == "Inspected") &&
+            (_me.IsGlobal || _me.ProjectScopes.Contains(g.ProjectId)) &&
+            (string.IsNullOrWhiteSpace(projectId) || projectId == "ALL" || g.ProjectId == projectId) &&
+            (string.IsNullOrWhiteSpace(warehouseId) || warehouseId == "ALL" || g.WarehouseId == warehouseId), ct);
+
+        var outstandingIssues = await _db.MaterialIssues.CountAsync(i =>
+            i.Status != "Posted" && i.Status != "Cancelled" && i.Status != "Rejected" &&
+            (_me.IsGlobal || _me.ProjectScopes.Contains(i.ProjectId)) &&
+            (string.IsNullOrWhiteSpace(projectId) || projectId == "ALL" || i.ProjectId == projectId), ct);
+
+        var pendingIssueApprovals = await _db.MaterialIssues.CountAsync(i =>
+            i.Status == "Submitted" &&
+            (_me.IsGlobal || _me.ProjectScopes.Contains(i.ProjectId)) &&
+            (string.IsNullOrWhiteSpace(projectId) || projectId == "ALL" || i.ProjectId == projectId), ct);
+
+        var openTransfers = await _db.StockTransfers
+            .Where(t => t.Status != "Completed" && t.Status != "Cancelled" &&
+                        (_me.IsGlobal || _me.ProjectScopes.Contains(t.SourceProjectId) || _me.ProjectScopes.Contains(t.DestinationProjectId)))
+            .ToListAsync(ct);
+        if (!string.IsNullOrWhiteSpace(projectId) && projectId != "ALL")
+        {
+            openTransfers = openTransfers
+                .Where(t => t.SourceProjectId == projectId || t.DestinationProjectId == projectId)
+                .ToList();
+        }
+
+        var inTransitTransfers = openTransfers.Count(t => t.Status == "InTransit" || t.Status == "Dispatched");
+        var transferDiscrepancies = await _db.StockTransfers.CountAsync(t => t.DiscrepancyStatus == "PendingReview", ct);
+        var returnDiscrepancies = await _db.MaterialReturns.CountAsync(r =>
+            r.Status == "Submitted" || r.Status == "PendingInspection" || r.Status == "Inspected", ct);
+        var grnDiscrepancies = await _db.GoodsReceipts.CountAsync(g => g.DiscrepancyIdentified, ct);
         var unread = (await VisibleNotifications(ct)).Count(n => n.Reads.All(r => r.UserId != _me.UserId));
+
+        string Severity(InventoryBalance b)
+        {
+            if (b.QuantityAvailable <= 0) return "OutOfStock";
+            if (b.Material != null && b.QuantityAvailable <= b.Material.MinimumStockLevel) return "Critical";
+            return "Reorder";
+        }
+
         var lowStock = balances
             .Where(b => b.Material != null && b.QuantityAvailable <= b.Material.ReorderLevel)
             .Select(b => new
             {
+                balanceId = b.Id,
                 materialId = b.MaterialId,
                 materialCode = b.Material!.ItemCode,
                 materialName = b.Material.Name,
+                categoryName = b.Material.Category?.Name ?? "Uncategorized",
+                unitCode = b.Material.BaseUnit?.Code ?? "",
+                warehouseId = b.WarehouseId,
                 warehouseName = b.Warehouse?.Name ?? "",
+                projectId = b.ProjectId,
+                projectName = b.Project?.Name ?? "",
+                quantityOnHand = b.QuantityOnHand,
                 quantityAvailable = b.QuantityAvailable,
-                reorderLevel = b.Material.ReorderLevel
-            }).Take(20).ToList();
+                quantityInTransit = b.QuantityInTransit,
+                minimumStockLevel = b.Material.MinimumStockLevel,
+                reorderLevel = b.Material.ReorderLevel,
+                shortfallQuantity = Money.Round4(Math.Max(0, b.Material.ReorderLevel - b.QuantityAvailable)),
+                weightedAverageCost = b.WeightedAverageCost,
+                estimatedReplenishmentCost = Money.Round2(Math.Max(0, b.Material.ReorderLevel - b.QuantityAvailable) * b.WeightedAverageCost),
+                severity = Severity(b)
+            })
+            .OrderBy(x => x.quantityAvailable)
+            .Take(20)
+            .ToList();
 
-        var recentLedger = await _db.Ledger.Include(e => e.Material).Include(e => e.Warehouse).Include(e => e.Project)
-            .AsNoTracking().OrderByDescending(e => e.TimestampUtc).Take(50).ToListAsync(ct);
-        var movements = recentLedger.Where(e => _me.CanAccessLocation(e.ProjectId, e.WarehouseId)).Take(10).Select(MapLedger).ToList();
+        var totalValue = Money.Round2(balances.Sum(b => b.InventoryValue));
+        var categoryGroups = balances
+            .GroupBy(b => b.Material?.Category?.Name ?? "Uncategorized")
+            .Select(g =>
+            {
+                var value = Money.Round2(g.Sum(x => x.InventoryValue));
+                return new
+                {
+                    categoryName = g.Key,
+                    totalQuantity = Money.Round4(g.Sum(x => x.QuantityOnHand)),
+                    totalValue = value,
+                    itemCount = g.Select(x => x.MaterialId).Distinct().Count(),
+                    sharePercent = totalValue > 0 ? Math.Round(value / totalValue * 100m, 1) : 0m
+                };
+            })
+            .OrderByDescending(c => c.totalValue)
+            .ToList();
+
+        var grnsByWh = await _db.GoodsReceipts.AsNoTracking()
+            .Where(g => g.Status == "SubmittedForInspection" || g.Status == "Inspected")
+            .GroupBy(g => g.WarehouseId)
+            .Select(g => new { warehouseId = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+        var issuesByWh = await _db.MaterialIssues.AsNoTracking()
+            .Where(i => i.Status != "Posted" && i.Status != "Cancelled" && i.Status != "Rejected")
+            .GroupBy(i => i.WarehouseId)
+            .Select(g => new { warehouseId = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+        var transfersByWh = openTransfers
+            .GroupBy(t => t.SourceWarehouseId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var locationSummaries = balances
+            .GroupBy(b => new { b.WarehouseId, b.ProjectId })
+            .Select(g =>
+            {
+                var first = g.First();
+                return new
+                {
+                    warehouseId = g.Key.WarehouseId,
+                    warehouseName = first.Warehouse?.Name ?? "",
+                    projectId = g.Key.ProjectId,
+                    projectName = first.Project?.Name ?? "",
+                    distinctMaterials = g.Select(x => x.MaterialId).Distinct().Count(),
+                    quantityOnHand = Money.Round4(g.Sum(x => x.QuantityOnHand)),
+                    quantityAvailable = Money.Round4(g.Sum(x => x.QuantityAvailable)),
+                    quantityInTransit = Money.Round4(g.Sum(x => x.QuantityInTransit)),
+                    inventoryValue = Money.Round2(g.Sum(x => x.InventoryValue)),
+                    lowStockCount = g.Count(x => x.Material != null && x.QuantityAvailable <= x.Material.ReorderLevel),
+                    pendingGrnCount = grnsByWh.FirstOrDefault(x => x.warehouseId == g.Key.WarehouseId)?.count ?? 0,
+                    openIssueCount = issuesByWh.FirstOrDefault(x => x.warehouseId == g.Key.WarehouseId)?.count ?? 0,
+                    openTransferCount = transfersByWh.TryGetValue(g.Key.WarehouseId, out var tc) ? tc : 0
+                };
+            })
+            .OrderBy(x => x.warehouseName)
+            .ToList();
+
+        var recentLedger = await _db.Ledger
+            .Include(e => e.Material!).ThenInclude(m => m.BaseUnit)
+            .Include(e => e.Warehouse)
+            .Include(e => e.Project)
+            .AsNoTracking()
+            .OrderByDescending(e => e.TimestampUtc)
+            .Take(100)
+            .ToListAsync(ct);
+
+        var movements = recentLedger
+            .Where(e => _me.CanAccessLocation(e.ProjectId, e.WarehouseId))
+            .Where(e => string.IsNullOrWhiteSpace(projectId) || projectId == "ALL" || e.ProjectId == projectId)
+            .Where(e => string.IsNullOrWhiteSpace(warehouseId) || warehouseId == "ALL" || e.WarehouseId == warehouseId)
+            .Where(e => InDate(e.TimestampUtc))
+            .Take(10)
+            .Select(MapLedger)
+            .ToList();
+
+        var recentAuditActivity = recentLedger
+            .Where(e => _me.CanAccessLocation(e.ProjectId, e.WarehouseId))
+            .Where(e => string.IsNullOrWhiteSpace(projectId) || projectId == "ALL" || e.ProjectId == projectId)
+            .Where(e => InDate(e.TimestampUtc))
+            .Take(10)
+            .Select(e => new
+            {
+                id = e.Id,
+                timestampUtc = e.TimestampUtc.ToString("o"),
+                module = e.SourceDocumentType,
+                documentNumber = e.SourceDocumentNumber,
+                documentId = e.SourceDocumentId,
+                action = e.TransactionType,
+                actorName = e.CreatedByName,
+                actorRole = "",
+                summary = $"{e.TransactionType} • {e.Material?.ItemCode ?? e.MaterialId} • qty {e.SignedQuantity}",
+                projectId = e.ProjectId,
+                warehouseId = e.WarehouseId,
+                targetRoute = e.SourceDocumentType switch
+                {
+                    "GoodsReceipt" => $"/grns/{e.SourceDocumentId}",
+                    "MaterialIssue" => $"/material-issues/{e.SourceDocumentId}",
+                    "MaterialReturn" => $"/material-returns/{e.SourceDocumentId}",
+                    "StockTransfer" => $"/stock-transfers/{e.SourceDocumentId}",
+                    "PurchaseOrder" => $"/purchase-orders/{e.SourceDocumentId}",
+                    _ => "/stock-ledger"
+                }
+            })
+            .ToList();
+
+        var totalOnHand = Money.Round4(balances.Sum(b => b.QuantityOnHand));
+        var totalReserved = Money.Round4(balances.Sum(b => b.QuantityReserved));
+        var totalAvailable = Money.Round4(balances.Sum(b => b.QuantityAvailable));
+        var totalInTransitQty = Money.Round4(balances.Sum(b => b.QuantityInTransit));
+        var totalInTransitValue = Money.Round2(balances.Sum(b => b.QuantityInTransit * b.WeightedAverageCost));
 
         return ApiResponse.Ok(new
         {
+            asOfTimestampUtc = DateTime.UtcNow.ToString("o"),
+            filtersApplied = new
+            {
+                projectId = string.IsNullOrWhiteSpace(projectId) ? "ALL" : projectId,
+                warehouseId = string.IsNullOrWhiteSpace(warehouseId) ? "ALL" : warehouseId,
+                fromDate = fromDate,
+                toDate = toDate
+            },
+            accessibleScopes = new { projects, warehouses },
             kpis = new
             {
-                materialCount = materials,
-                totalInventoryValue = Money.Round2(balances.Sum(b => b.InventoryValue)),
-                pendingRequisitionApprovalsCount = pendingReq,
-                pendingPoApprovalsCount = pendingPo,
-                pendingGrnInspectionsCount = pendingGrn,
-                inTransitQuantity = inTransit,
-                unreadNotificationsCount = unread,
+                // Full dashboard contract (React)
+                totalInventoryValue = totalValue,
+                totalQuantityOnHand = totalOnHand,
+                totalQuantityReserved = totalReserved,
+                totalQuantityAvailable = totalAvailable,
+                totalInTransitQuantity = totalInTransitQty,
+                totalInTransitValue = totalInTransitValue,
+                distinctMaterialsCount = balances.Select(b => b.MaterialId).Distinct().Count(),
+                activeLocationsCount = balances.Select(b => b.WarehouseId).Distinct().Count(),
                 lowStockCount = lowStock.Count,
-                returnDiscrepanciesCount = await _db.StockTransfers.CountAsync(t => t.DiscrepancyStatus == "PendingReview", ct)
+                criticalStockCount = lowStock.Count(x => x.severity is "Critical" or "OutOfStock"),
+                pendingRequisitionApprovals = pendingReq,
+                outstandingMaterialIssues = outstandingIssues,
+                pendingIssueApprovalsCount = pendingIssueApprovals,
+                pendingGrnsInspection = pendingGrn,
+                openTransfersCount = openTransfers.Count,
+                inTransitTransfersCount = inTransitTransfers,
+                unresolvedDiscrepanciesCount = transferDiscrepancies + grnDiscrepancies + returnDiscrepancies,
+                grnDiscrepanciesCount = grnDiscrepancies,
+                transferDiscrepanciesCount = transferDiscrepancies,
+                returnDiscrepanciesCount = returnDiscrepancies,
+                pendingPoApprovalsCount = pendingPo,
+                // Sidebar / legacy aliases
+                materialCount = await _db.Materials.CountAsync(m => m.IsActive, ct),
+                pendingRequisitionApprovalsCount = pendingReq,
+                pendingGrnInspectionsCount = pendingGrn,
+                inTransitQuantity = totalInTransitQty,
+                unreadNotificationsCount = unread
             },
             lowStockItems = lowStock,
-            locationSummaries = balances.GroupBy(b => b.WarehouseId).Select(g => new
-            {
-                warehouseId = g.Key,
-                warehouseName = g.First().Warehouse?.Name ?? "",
-                inventoryValue = Money.Round2(g.Sum(x => x.InventoryValue)),
-                skuCount = g.Count(x => x.QuantityOnHand > 0)
-            }).ToList(),
-            categoryValuation = balances.GroupBy(b => b.Material?.CategoryId ?? "").Select(g => new
-            {
-                categoryId = g.Key,
-                categoryName = g.First().Material?.Category?.Name ?? "Uncategorized",
-                inventoryValue = Money.Round2(g.Sum(x => x.InventoryValue))
-            }).ToList(),
+            locationSummaries,
+            categoryValuation = categoryGroups,
             recentMovements = movements,
-            recentAuditActivity = movements
+            recentAuditActivity
         });
     }
 

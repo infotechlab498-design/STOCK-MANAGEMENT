@@ -21,12 +21,12 @@ import {
   History,
   Bell,
 } from 'lucide-react';
-import { PageHeader } from '../components/common/PageHeader';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { DataTable, ColumnDef } from '../components/common/DataTable';
 import { EmptyState, LoadingSpinner } from '../components/common/EmptyState';
+import { AppLayout } from '../layouts/AppLayout';
 import {
   dashboardReportService,
   DashboardSummaryData,
@@ -35,11 +35,13 @@ import {
   DashboardMovementItem,
 } from '../services/api/dashboardReportService';
 import { ApiClientException } from '../services/api/apiClient';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
+import { can, canAny } from '../security/rolePermissions';
 
 export const DashboardOverviewPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const roles = user?.roles;
 
   const [projectId, setProjectId] = useState<string>('ALL');
   const [warehouseId, setWarehouseId] = useState<string>('ALL');
@@ -87,8 +89,10 @@ export const DashboardOverviewPage: React.FC = () => {
     setToDate('');
   };
 
-  const formatCurrency = (val: number) =>
-    `$${(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatCurrency = (val: number | null | undefined) =>
+    `$${(Number(val) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const n = (val: number | null | undefined) => Number(val) || 0;
 
   const movementColumns: ColumnDef<DashboardMovementItem>[] = [
     {
@@ -345,30 +349,34 @@ export const DashboardOverviewPage: React.FC = () => {
   );
 
   return (
-    <div>
-      <PageHeader
-        title="Executive Operations & Inventory Control Dashboard"
-        description={`Authorized real-time stock valuation (Moving WAC), low-stock thresholds, workflow queues, and ledger activity${
-          data?.asOfTimestampUtc ? ` • As of ${new Date(data.asOfTimestampUtc).toLocaleTimeString()}` : ''
-        }`}
-        actions={
-          <div className="no-print" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<RefreshCw size={15} />}
-              onClick={loadDashboard}
-            >
-              Refresh
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<Printer size={15} />}
-              onClick={() => window.print()}
-            >
-              Print / PDF
-            </Button>
+    <AppLayout
+      breadcrumbs={[
+        { label: 'StructStock', onClick: () => navigate('/dashboard') },
+        { label: 'Dashboard', active: true },
+      ]}
+      title="Executive Operations & Inventory Control Dashboard"
+      description={`Authorized real-time stock valuation (Moving WAC), low-stock thresholds, workflow queues, and ledger activity${
+        data?.asOfTimestampUtc ? ` • As of ${new Date(data.asOfTimestampUtc).toLocaleTimeString()}` : ''
+      }`}
+      actions={
+        <div className="no-print" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<RefreshCw size={15} />}
+            onClick={loadDashboard}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Printer size={15} />}
+            onClick={() => window.print()}
+          >
+            Print / PDF
+          </Button>
+          {can(roles, 'nav.reports.centre') && (
             <Button
               variant="secondary"
               size="sm"
@@ -383,6 +391,8 @@ export const DashboardOverviewPage: React.FC = () => {
             >
               Reports & CSV Export
             </Button>
+          )}
+          {can(roles, 'nav.requisitions.write') && (
             <Button
               variant="primary"
               size="sm"
@@ -391,10 +401,10 @@ export const DashboardOverviewPage: React.FC = () => {
             >
               New Requisition
             </Button>
-          </div>
-        }
-      />
-
+          )}
+        </div>
+      }
+    >
       {/* Server-Backed Scope & Date Filter Bar */}
       <Card style={{ marginBottom: 'var(--space-5)' }}>
         <div
@@ -603,7 +613,94 @@ export const DashboardOverviewPage: React.FC = () => {
         </Card>
       ) : kpis ? (
         <>
-          {/* 6 Clickable Executive KPI Cards */}
+          {can(roles, 'dash.workqueue') && (
+            <Card style={{ marginBottom: 'var(--space-5)' }}>
+              <div style={{ fontWeight: 700, marginBottom: 12, color: '#2D3748' }}>
+                Role Work Queue — {roles?.join(', ') || 'Authorized'}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {can(roles, 'nav.admin.users') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/users')}>
+                    Users & RBAC
+                  </Button>
+                )}
+                {can(roles, 'nav.admin.settings') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/settings')}>
+                    System Settings
+                  </Button>
+                )}
+                {can(roles, 'nav.requisitions.approve') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/approvals')}>
+                    Req Approvals
+                  </Button>
+                )}
+                {can(roles, 'nav.procurement.po.write') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/purchase-orders/new')}>
+                    Create PO
+                  </Button>
+                )}
+                {can(roles, 'nav.procurement.rates') && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate('/purchase-orders/rate-comparison')}
+                  >
+                    Rate Comparison
+                  </Button>
+                )}
+                {can(roles, 'nav.procurement.po.approve') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/purchase-orders')}>
+                    PO Approval Queue
+                  </Button>
+                )}
+                {can(roles, 'nav.receiving.grn.write') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/grns')}>
+                    GRN Inspect / Post
+                  </Button>
+                )}
+                {can(roles, 'nav.inventory.issues.write') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/material-issues/new')}>
+                    New Material Issue
+                  </Button>
+                )}
+                {can(roles, 'nav.inventory.issues.approve') && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate('/material-issues/approval-inbox')}
+                  >
+                    Issue Approvals
+                  </Button>
+                )}
+                {can(roles, 'nav.inventory.transfers.view') && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate('/stock-transfers/in-transit')}
+                  >
+                    In-Transit
+                  </Button>
+                )}
+                {can(roles, 'nav.reports.valuation') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/reports/valuation')}>
+                    Valuation (WAC)
+                  </Button>
+                )}
+                {can(roles, 'nav.inventory.ledger') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/stock-ledger')}>
+                    Stock Ledger
+                  </Button>
+                )}
+                {can(roles, 'nav.inventory.stock') && (
+                  <Button variant="secondary" size="sm" onClick={() => navigate('/stock')}>
+                    Stock Balances
+                  </Button>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* Clickable Executive KPI Cards (permission-gated) */}
           <div
             style={{
               display: 'grid',
@@ -612,71 +709,80 @@ export const DashboardOverviewPage: React.FC = () => {
               marginBottom: 'var(--space-6)',
             }}
           >
-            {renderKpiBox({
+            {canAny(roles, ['dash.inventory.kpis', 'nav.reports.valuation']) &&
+              renderKpiBox({
               label: 'Usable Inventory Value (WAC)',
               value: formatCurrency(kpis.totalInventoryValue),
-              subtext: `${kpis.totalQuantityOnHand.toLocaleString()} usable units on hand`,
-              footer: `Across ${kpis.distinctMaterialsCount} SKUs • Excludes in-transit`,
+              subtext: `${n(kpis.totalQuantityOnHand).toLocaleString()} usable units on hand`,
+              footer: `Across ${n(kpis.distinctMaterialsCount)} SKUs • Excludes in-transit`,
               icon: <DollarSign size={20} />,
               accentColor: '#2D3748',
               onClick: () =>
                 navigate(
-                  `/reports?type=inventory-valuation&projectId=${projectId}&warehouseId=${warehouseId}`
+                  can(roles, 'nav.reports.valuation')
+                    ? `/reports/valuation`
+                    : `/reports?type=inventory-valuation&projectId=${projectId}&warehouseId=${warehouseId}`
                 ),
             })}
 
-            {renderKpiBox({
+            {can(roles, 'nav.inventory.stock') &&
+              renderKpiBox({
               label: 'Low-Stock & Reorder Alerts',
-              value: String(kpis.lowStockCount),
-              subtext: `${kpis.criticalStockCount} critical / below safety minimum`,
+              value: String(n(kpis.lowStockCount)),
+              subtext: `${n(kpis.criticalStockCount)} critical / below safety minimum`,
               footer: 'Click to open Low-Stock Reorder Report',
               icon: <AlertTriangle size={20} />,
-              accentColor: kpis.lowStockCount > 0 ? '#E53E3E' : '#38A169',
+              accentColor: n(kpis.lowStockCount) > 0 ? '#E53E3E' : '#38A169',
               onClick: () =>
                 navigate(
                   `/reports?type=low-stock-reorder&projectId=${projectId}&warehouseId=${warehouseId}`
                 ),
             })}
 
-            {renderKpiBox({
+            {canAny(roles, ['nav.requisitions.view', 'nav.requisitions.approve']) &&
+              renderKpiBox({
               label: 'Pending Requisition Approvals',
-              value: String(kpis.pendingRequisitionApprovals),
-              subtext: `${kpis.outstandingMaterialIssues} open material issues`,
-              footer: `${kpis.pendingPoApprovalsCount} POs awaiting approval`,
+              value: String(n(kpis.pendingRequisitionApprovals)),
+              subtext: `${n(kpis.outstandingMaterialIssues)} open material issues`,
+              footer: `${n(kpis.pendingPoApprovalsCount)} POs awaiting approval`,
               icon: <ClipboardList size={20} />,
               accentColor: '#3182CE',
-              onClick: () => navigate('/requisitions'),
+              onClick: () =>
+                navigate(can(roles, 'nav.requisitions.approve') ? '/approvals' : '/requisitions'),
             })}
 
-            {renderKpiBox({
+            {can(roles, 'nav.receiving.grn.view') &&
+              renderKpiBox({
               label: 'Pending GRNs & QA Inspection',
-              value: String(kpis.pendingGrnsInspection),
-              subtext: `${kpis.grnDiscrepanciesCount} GRNs with discrepancies`,
+              value: String(n(kpis.pendingGrnsInspection)),
+              subtext: `${n(kpis.grnDiscrepanciesCount)} GRNs with discrepancies`,
               footer: 'Click to inspect & post receipts',
               icon: <Truck size={20} />,
               accentColor: '#DD6B20',
               onClick: () => navigate('/grns'),
             })}
 
-            {renderKpiBox({
+            {can(roles, 'nav.inventory.transfers.view') &&
+              renderKpiBox({
               label: 'Open Transfers & In-Transit',
-              value: `${kpis.inTransitTransfersCount} In Transit`,
-              subtext: `${kpis.totalInTransitQuantity.toLocaleString()} units (${formatCurrency(
+              value: `${n(kpis.inTransitTransfersCount)} In Transit`,
+              subtext: `${n(kpis.totalInTransitQuantity).toLocaleString()} units (${formatCurrency(
                 kpis.totalInTransitValue
               )})`,
-              footer: `${kpis.openTransfersCount} total open transfers`,
+              footer: `${n(kpis.openTransfersCount)} total open transfers`,
               icon: <ArrowLeftRight size={20} />,
               accentColor: '#DD6B20',
               onClick: () => navigate('/stock-transfers/in-transit'),
             })}
 
-            {renderKpiBox({
+            {can(roles, 'nav.inventory.transfers.view') &&
+              renderKpiBox({
               label: 'Unresolved Discrepancies',
-              value: String(kpis.unresolvedDiscrepanciesCount),
-              subtext: `${kpis.transferDiscrepanciesCount} transfer • ${kpis.grnDiscrepanciesCount} GRN`,
-              footer: `${kpis.returnDiscrepanciesCount} damaged returns awaiting action`,
+              value: String(n(kpis.unresolvedDiscrepanciesCount)),
+              subtext: `${n(kpis.transferDiscrepanciesCount)} transfer • ${n(kpis.grnDiscrepanciesCount)} GRN`,
+              footer: `${n(kpis.returnDiscrepanciesCount)} damaged returns awaiting action`,
               icon: <Boxes size={20} />,
-              accentColor: kpis.unresolvedDiscrepanciesCount > 0 ? '#E53E3E' : '#38A169',
+              accentColor: n(kpis.unresolvedDiscrepanciesCount) > 0 ? '#E53E3E' : '#38A169',
               onClick: () => navigate('/stock-transfers/discrepancies'),
             })}
           </div>
@@ -1005,6 +1111,6 @@ export const DashboardOverviewPage: React.FC = () => {
           </div>
         </>
       ) : null}
-    </div>
+    </AppLayout>
   );
 };

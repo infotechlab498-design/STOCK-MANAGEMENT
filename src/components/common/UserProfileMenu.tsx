@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { LogOut, Users, Settings, ChevronDown, Shield, Building } from 'lucide-react';
-import { useAuth } from '../../app/AuthContext';
+import { useAuth } from '../../app/useAuth';
 import { useNavigate } from 'react-router-dom';
 
 export const UserProfileMenu: React.FC = () => {
@@ -42,7 +42,9 @@ export const UserProfileMenu: React.FC = () => {
     .substring(0, 2);
 
   const primaryRole = user.roles?.[0] || 'Viewer';
-  const isSuperAdminOrManager = hasRole(['SuperAdmin', 'InventoryManager']);
+  const canManageUsers = hasRole(['SuperAdmin']);
+  const canOpenSettings = hasRole(['SuperAdmin']);
+  const canOpenArchitecture = hasRole(['SuperAdmin', 'InventoryManager']);
 
   const handleNavigate = (path: string) => {
     setIsOpen(false);
@@ -150,7 +152,7 @@ export const UserProfileMenu: React.FC = () => {
 
             <div className="dropdown-divider" />
 
-            {isSuperAdminOrManager && (
+            {canManageUsers && (
               <button
                 type="button"
                 className="dropdown-item"
@@ -161,23 +163,27 @@ export const UserProfileMenu: React.FC = () => {
               </button>
             )}
 
-            <button
-              type="button"
-              className="dropdown-item"
-              onClick={() => handleNavigate('/settings')}
-            >
-              <Settings size={16} />
-              <span>System Settings</span>
-            </button>
+            {canOpenSettings && (
+              <button
+                type="button"
+                className="dropdown-item"
+                onClick={() => handleNavigate('/settings')}
+              >
+                <Settings size={16} />
+                <span>System Settings</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              className="dropdown-item"
-              onClick={() => handleNavigate('/architecture')}
-            >
-              <Shield size={16} />
-              <span>Architecture & Tokens</span>
-            </button>
+            {canOpenArchitecture && (
+              <button
+                type="button"
+                className="dropdown-item"
+                onClick={() => handleNavigate('/architecture')}
+              >
+                <Shield size={16} />
+                <span>Architecture & Tokens</span>
+              </button>
+            )}
 
             <div className="dropdown-divider" />
 

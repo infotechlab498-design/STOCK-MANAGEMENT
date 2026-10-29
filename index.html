@@ -15,6 +15,48 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Kill leftover service workers before the SPA boots (Vite localhost / approval routes). -->
+    <script>
+      (function () {
+        if (!('serviceWorker' in navigator)) return;
+        var host = location.hostname;
+        var local =
+          host === 'localhost' ||
+          host === '127.0.0.1' ||
+          host === '[::1]' ||
+          host.endsWith('.local');
+        if (!local) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (reg) {
+            reg.unregister();
+          });
+        });
+        if (navigator.serviceWorker.register) {
+          navigator.serviceWorker.register = function () {
+            return Promise.resolve({
+              unregister: function () {
+                return Promise.resolve(true);
+              },
+              update: function () {
+                return Promise.resolve(this);
+              },
+              active: null,
+              installing: null,
+              waiting: null,
+              scope: location.origin + '/',
+              addEventListener: function () {},
+            });
+          };
+        }
+        if ('caches' in window) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (key) {
+              caches.delete(key);
+            });
+          });
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

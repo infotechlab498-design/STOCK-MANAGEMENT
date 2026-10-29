@@ -21,7 +21,7 @@ import {
   ReconciliationReport,
   DiscrepancyItem,
 } from '../services/api/inventoryService';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 
 export const InventoryReconciliationPage: React.FC = () => {
   const { hasRole } = useAuth();

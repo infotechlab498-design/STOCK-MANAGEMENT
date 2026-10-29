@@ -5,7 +5,15 @@ namespace StructStock.Application;
 
 public partial class InventoryApp
 {
-    public async Task<object> ListBalancesAsync(string? search, string? projectId, string? warehouseId, string? materialId, int? page, int? pageSize, CancellationToken ct)
+    public async Task<object> ListBalancesAsync(
+        string? search,
+        string? projectId,
+        string? warehouseId,
+        string? materialId,
+        string? status,
+        int? page,
+        int? pageSize,
+        CancellationToken ct)
     {
         var list = await _db.Balances
             .Include(b => b.Material).ThenInclude(m => m!.Category)
@@ -25,7 +33,50 @@ public partial class InventoryApp
                 (b.Material?.Name ?? "").ToUpper().Contains(term)).ToList();
         }
 
-        return ApiResponse.Ok(Page(filtered.Select(MapBalance).ToList(), page, pageSize));
+        static bool IsLowStock(InventoryBalance b) =>
+            b.Material != null && b.QuantityAvailable <= b.Material.ReorderLevel;
+
+        var statusKey = (status ?? "ALL").Trim().ToUpperInvariant();
+        filtered = statusKey switch
+        {
+            "LOW_STOCK" => filtered.Where(IsLowStock).ToList(),
+            "OUT_OF_STOCK" => filtered.Where(b => b.QuantityAvailable <= 0).ToList(),
+            "IN_STOCK" => filtered.Where(b => b.QuantityAvailable > 0 && !IsLowStock(b)).ToList(),
+            _ => filtered
+        };
+
+        var metrics = new
+        {
+            totalMaterials = filtered.Select(b => b.MaterialId).Distinct().Count(),
+            totalLocations = filtered.Select(b => b.WarehouseId).Distinct().Count(),
+            totalInventoryValue = Money.Round2(filtered.Sum(b => b.InventoryValue)),
+            totalQuantityOnHand = Money.Round4(filtered.Sum(b => b.QuantityOnHand)),
+            lowStockCount = filtered.Count(IsLowStock)
+        };
+
+        var index = PageNo(page);
+        var take = PageSize(pageSize);
+        var total = filtered.Count;
+        var pages = Math.Max(1, (int)Math.Ceiling(total / (double)take));
+        var items = filtered
+            .OrderBy(b => b.Material?.ItemCode)
+            .ThenBy(b => b.Warehouse?.Name)
+            .Skip((index - 1) * take)
+            .Take(take)
+            .Select(MapBalance)
+            .ToList();
+
+        return ApiResponse.Ok(new
+        {
+            items,
+            pageIndex = index,
+            pageSize = take,
+            totalCount = total,
+            totalPages = pages,
+            hasPreviousPage = index > 1,
+            hasNextPage = index < pages,
+            metrics
+        });
     }
 
     public async Task<object> GetBalancesForMaterialAsync(string materialId, CancellationToken ct)
@@ -72,50 +123,95 @@ public partial class InventoryApp
 
     public async Task<object> ValuationAsync(string? projectId, string? warehouseId, CancellationToken ct)
     {
+        _me.RequireRole("SuperAdmin", "InventoryManager", "AccountsOfficer", "ProjectManager");
         var balances = await _db.Balances
             .Include(b => b.Material).ThenInclude(m => m!.Category)
+            .Include(b => b.Material).ThenInclude(m => m!.BaseUnit)
             .Include(b => b.Warehouse).Include(b => b.Project)
             .AsNoTracking().ToListAsync(ct);
         var filtered = balances.Where(b => _me.CanAccessLocation(b.ProjectId, b.WarehouseId)).ToList();
         if (!string.IsNullOrWhiteSpace(projectId) && projectId != "ALL") filtered = filtered.Where(b => b.ProjectId == projectId).ToList();
         if (!string.IsNullOrWhiteSpace(warehouseId) && warehouseId != "ALL") filtered = filtered.Where(b => b.WarehouseId == warehouseId).ToList();
 
-        var byMaterial = filtered.GroupBy(b => b.MaterialId).Select(g => new
+        var byMaterial = filtered.GroupBy(b => b.MaterialId).Select(g =>
         {
-            materialId = g.Key,
-            materialCode = g.First().Material?.ItemCode ?? "",
-            materialName = g.First().Material?.Name ?? "",
-            categoryName = g.First().Material?.Category?.Name ?? "",
-            quantityOnHand = g.Sum(x => x.QuantityOnHand),
-            inventoryValue = Money.Round2(g.Sum(x => x.InventoryValue)),
-            weightedAverageCost = g.Sum(x => x.QuantityOnHand) > 0
-                ? Money.Round4(g.Sum(x => x.InventoryValue) / g.Sum(x => x.QuantityOnHand))
-                : 0m
-        }).ToList();
+            var qty = g.Sum(x => x.QuantityOnHand);
+            var value = Money.Round2(g.Sum(x => x.InventoryValue));
+            return new
+            {
+                materialId = g.Key,
+                materialCode = g.First().Material?.ItemCode ?? "",
+                materialName = g.First().Material?.Name ?? "",
+                categoryName = g.First().Material?.Category?.Name ?? "",
+                unitCode = g.First().Material?.BaseUnit?.Code ?? "",
+                totalQuantity = Money.Round4(qty),
+                averageCost = qty > 0 ? Money.Round4(value / qty) : 0m,
+                totalValue = value,
+                locationCount = g.Select(x => x.WarehouseId).Distinct().Count(),
+                // legacy aliases
+                quantityOnHand = Money.Round4(qty),
+                inventoryValue = value,
+                weightedAverageCost = qty > 0 ? Money.Round4(value / qty) : 0m
+            };
+        }).OrderByDescending(x => x.totalValue).ToList();
 
-        var byWarehouse = filtered.GroupBy(b => b.WarehouseId).Select(g => new
+        var byWarehouse = filtered.GroupBy(b => b.WarehouseId).Select(g =>
         {
-            warehouseId = g.Key,
-            warehouseName = g.First().Warehouse?.Name ?? "",
-            inventoryValue = Money.Round2(g.Sum(x => x.InventoryValue)),
-            skuCount = g.Count(x => x.QuantityOnHand > 0)
-        }).ToList();
+            var qty = g.Sum(x => x.QuantityOnHand);
+            var value = Money.Round2(g.Sum(x => x.InventoryValue));
+            return new
+            {
+                locationId = g.Key,
+                locationName = g.First().Warehouse?.Name ?? "",
+                locationType = "Warehouse",
+                itemCount = g.Select(x => x.MaterialId).Distinct().Count(),
+                totalQuantity = Money.Round4(qty),
+                totalValue = value,
+                warehouseId = g.Key,
+                warehouseName = g.First().Warehouse?.Name ?? "",
+                inventoryValue = value,
+                skuCount = g.Count(x => x.QuantityOnHand > 0)
+            };
+        }).OrderByDescending(x => x.totalValue).ToList();
 
-        var byProject = filtered.GroupBy(b => b.ProjectId).Select(g => new
+        var byProject = filtered.GroupBy(b => b.ProjectId).Select(g =>
         {
-            projectId = g.Key,
-            projectName = g.First().Project?.Name ?? "",
-            inventoryValue = Money.Round2(g.Sum(x => x.InventoryValue))
-        }).ToList();
+            var qty = g.Sum(x => x.QuantityOnHand);
+            var value = Money.Round2(g.Sum(x => x.InventoryValue));
+            return new
+            {
+                locationId = g.Key,
+                locationName = g.First().Project?.Name ?? "",
+                locationType = "Project",
+                itemCount = g.Select(x => x.MaterialId).Distinct().Count(),
+                totalQuantity = Money.Round4(qty),
+                totalValue = value,
+                projectId = g.Key,
+                projectName = g.First().Project?.Name ?? "",
+                inventoryValue = value
+            };
+        }).OrderByDescending(x => x.totalValue).ToList();
+
+        var totalInventoryValue = Money.Round2(filtered.Sum(b => b.InventoryValue));
+        var totalQuantityOnHand = Money.Round4(filtered.Sum(b => b.QuantityOnHand));
 
         return ApiResponse.Ok(new
         {
             valuationPolicy = "WEIGHTED_AVERAGE_COST",
-            totalInventoryValue = Money.Round2(filtered.Sum(b => b.InventoryValue)),
-            totalQuantityOnHand = Money.Round4(filtered.Sum(b => b.QuantityOnHand)),
             byMaterial,
             byWarehouse,
             byProject,
+            summary = new
+            {
+                totalInventoryValue,
+                totalQuantityOnHand,
+                distinctMaterials = byMaterial.Count,
+                activeLocations = byWarehouse.Count,
+                asOfTimestampUtc = DateTime.UtcNow.ToString("o")
+            },
+            // flat aliases for older clients
+            totalInventoryValue,
+            totalQuantityOnHand,
             lines = filtered.Select(MapBalance).ToList()
         });
     }
@@ -199,28 +295,37 @@ public partial class InventoryApp
         return ApiResponse.Ok(new { recovered = balances.Count }, "Balances rebuilt from ledger");
     }
 
-    private static object MapBalance(InventoryBalance b) => new
+    private static object MapBalance(InventoryBalance b)
     {
-        id = b.Id,
-        materialId = b.MaterialId,
-        materialCode = b.Material?.ItemCode ?? "",
-        materialName = b.Material?.Name ?? "",
-        categoryId = b.Material?.CategoryId,
-        categoryName = b.Material?.Category?.Name,
-        unitCode = b.Material?.BaseUnit?.Code ?? "",
-        warehouseId = b.WarehouseId,
-        warehouseName = b.Warehouse?.Name ?? "",
-        projectId = b.ProjectId,
-        projectName = b.Project?.Name ?? "",
-        quantityOnHand = b.QuantityOnHand,
-        quantityReserved = b.QuantityReserved,
-        quantityAvailable = b.QuantityAvailable,
-        quantityInTransit = b.QuantityInTransit,
-        weightedAverageCost = b.WeightedAverageCost,
-        inventoryValue = b.InventoryValue,
-        version = b.Version,
-        lastUpdatedUtc = b.LastUpdatedUtc.ToString("o")
-    };
+        var reorder = b.Material?.ReorderLevel ?? 0m;
+        var minimum = b.Material?.MinimumStockLevel ?? 0m;
+        var isLowStock = b.Material != null && b.QuantityAvailable <= reorder;
+        return new
+        {
+            id = b.Id,
+            materialId = b.MaterialId,
+            materialCode = b.Material?.ItemCode ?? "",
+            materialName = b.Material?.Name ?? "",
+            categoryId = b.Material?.CategoryId,
+            categoryName = b.Material?.Category?.Name,
+            unitCode = b.Material?.BaseUnit?.Code ?? "",
+            warehouseId = b.WarehouseId,
+            warehouseName = b.Warehouse?.Name ?? "",
+            projectId = b.ProjectId,
+            projectName = b.Project?.Name ?? "",
+            quantityOnHand = b.QuantityOnHand,
+            quantityReserved = b.QuantityReserved,
+            quantityAvailable = b.QuantityAvailable,
+            quantityInTransit = b.QuantityInTransit,
+            weightedAverageCost = b.WeightedAverageCost,
+            inventoryValue = b.InventoryValue,
+            version = b.Version,
+            lastUpdatedUtc = b.LastUpdatedUtc.ToString("o"),
+            globalMinimumStockLevel = minimum,
+            globalReorderLevel = reorder,
+            isLowStock
+        };
+    }
 
     private static object MapLedger(StockLedgerEntry e) => new
     {

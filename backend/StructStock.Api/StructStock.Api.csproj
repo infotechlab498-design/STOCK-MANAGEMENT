@@ -15,6 +15,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>structstock-api-local-dev</UserSecretsId>
   </PropertyGroup>
 
 </Project>

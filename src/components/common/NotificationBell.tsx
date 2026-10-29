@@ -16,8 +16,8 @@ import {
   NotificationItem,
   NotificationSeverity,
 } from '../../services/api/notificationService';
-import { useAuth } from '../../app/AuthContext';
-import { useRealtime } from '../../app/RealtimeContext';
+import { useAuth } from '../../app/useAuth';
+import { useRealtime } from '../../app/useRealtime';
 
 export const NotificationBell: React.FC = () => {
   const [open, setOpen] = useState(false);

@@ -8,12 +8,14 @@ using StructStock.Api.Realtime;
 using StructStock.Application;
 using StructStock.Domain;
 using StructStock.Infrastructure;
+using StructStock.Infrastructure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlServer(builder.Configuration.GetConnectionString("SqlServer")));
+builder.Services.AddStructStockIdentity();
 builder.Services.AddScoped<CurrentUserState>();
 builder.Services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<CurrentUserState>());
 builder.Services.AddScoped<CurrentUserAccessor>();
@@ -101,6 +103,34 @@ var v0 = app.MapGroup("/api");
 v0.MapStructStockApi();
 
 app.MapHub<InventoryHub>("/hubs/inventory");
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapGet("/health/db", async (AppDbContext db, CancellationToken ct) =>
+{
+    try
+    {
+        var canConnect = await db.Database.CanConnectAsync(ct);
+        if (!canConnect)
+        {
+            return Results.Json(new { status = "unhealthy", database = "unreachable" }, statusCode: 503);
+        }
+
+        var userCount = await db.Users.AsNoTracking().CountAsync(ct);
+        var settingsPresent = await db.Settings.AsNoTracking().AnyAsync(ct);
+        return Results.Ok(new
+        {
+            status = "ok",
+            database = "StructStock",
+            canConnect = true,
+            users = userCount,
+            settingsPresent
+        });
+    }
+    catch (Exception)
+    {
+        return Results.Json(new { status = "unhealthy", database = "error" }, statusCode: 503);
+    }
+});
 
 if (args.Contains("seed-json"))
 {

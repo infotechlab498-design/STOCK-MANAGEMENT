@@ -1,6 +1,4 @@
 import React, { ReactNode } from 'react';
-import { Sidebar } from './Sidebar';
-import { TopHeader } from './TopHeader';
 import { Breadcrumbs, BreadcrumbItem } from '../components/common/Breadcrumbs';
 import { PageHeader } from '../components/common/PageHeader';
 import { ContentContainer } from '../components/common/ContentContainer';
@@ -16,6 +14,10 @@ export interface AppLayoutProps {
   className?: string;
 }
 
+/**
+ * Page content chrome (breadcrumbs / title / actions).
+ * Sidebar and top header come from AuthenticatedShell so every route shares one nav.
+ */
 export const AppLayout: React.FC<AppLayoutProps> = ({
   breadcrumbs,
   title,
@@ -27,29 +29,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   className = '',
 }) => {
   return (
-    <div className={`app-shell ${className}`.trim()}>
-      <Sidebar />
-      <div className="app-main">
-        <TopHeader />
-        <main className="app-content" id="main-content">
-          <ContentContainer maxWidth={maxWidth}>
-            {breadcrumbs && breadcrumbs.length > 0 && (
-              <Breadcrumbs items={breadcrumbs} />
-            )}
+    <ContentContainer maxWidth={maxWidth} className={className}>
+      {breadcrumbs && breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} />}
 
-            {(title || actions) && (
-              <PageHeader
-                title={title}
-                description={description}
-                badge={badge}
-                actions={actions}
-              />
-            )}
+      {(title || actions) && (
+        <PageHeader title={title} description={description} badge={badge} actions={actions} />
+      )}
 
-            {children}
-          </ContentContainer>
-        </main>
-      </div>
-    </div>
+      {children}
+    </ContentContainer>
   );
 };

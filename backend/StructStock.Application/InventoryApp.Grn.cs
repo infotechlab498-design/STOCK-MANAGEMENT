@@ -61,7 +61,7 @@ public partial class InventoryApp
 
     public async Task<object> CreateGrnAsync(GrnWriteRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper");
         var po = await LoadPo(req.PurchaseOrderId!, ct)
             ?? throw new AppException(400, "Purchase order is required");
         if (po.Status is not ("Issued" or "PartiallyReceived"))
@@ -139,7 +139,7 @@ public partial class InventoryApp
 
     public async Task<object> UpdateGrnAsync(string id, GrnWriteRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper");
         var grn = await LoadGrn(id, ct) ?? throw new AppException(404, "GRN not found");
         if (grn.Status is not ("Draft" or "ReturnedForCorrection"))
         {
@@ -203,7 +203,7 @@ public partial class InventoryApp
 
     public async Task<object> SubmitGrnAsync(string id, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper");
         var grn = await LoadGrn(id, ct) ?? throw new AppException(404, "GRN not found");
         if (grn.Status is not ("Draft" or "ReturnedForCorrection")) throw new AppException(400, "Invalid status for submit");
         grn.Status = "SubmittedForInspection";
@@ -215,7 +215,7 @@ public partial class InventoryApp
 
     public async Task<object> InspectGrnAsync(string id, InspectionChecklistRequest? checklist, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper");
         var grn = await LoadGrn(id, ct) ?? throw new AppException(404, "GRN not found");
         if (grn.Status != "SubmittedForInspection") throw new AppException(400, "GRN must be SubmittedForInspection");
         ApplyChecklist(grn, checklist);
@@ -268,7 +268,7 @@ public partial class InventoryApp
 
     public async Task<object> PostGrnAsync(string id, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper");
+        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper", "AccountsOfficer");
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         var grn = await LoadGrn(id, ct) ?? throw new AppException(404, "GRN not found");
         RequireLocation(grn.ProjectId, grn.WarehouseId);

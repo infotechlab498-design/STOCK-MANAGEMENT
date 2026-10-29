@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { isJwtTokenValid } from '../services/api/apiClient';
 import { LoginPage } from '../components/auth/LoginPage';
 import { DashboardOverviewPage } from '../pages/DashboardOverviewPage';
@@ -42,6 +42,8 @@ import { NotificationsCenterPage } from '../pages/NotificationsCenterPage';
 import { ModulePlaceholderPage } from '../pages/ModulePlaceholderPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { LoadingSpinner } from '../components/common/EmptyState';
+import { AuthenticatedShell } from '../layouts/AuthenticatedShell';
+import { rolesFor, rolesForAny } from '../security/rolePermissions';
 
 // Protected Route Guard enforcing valid JWT session and role authorization
 export const ProtectedRoute: React.FC<{
@@ -84,6 +86,8 @@ export const AppRoutes: React.FC = () => {
       {/* Public Login Route */}
       <Route path="/login" element={<PublicLoginRoute />} />
 
+      {/* Shared Sidebar + TopHeader for every authenticated page */}
+      <Route element={<AuthenticatedShell />}>
       {/* Root redirect */}
       <Route
         path="/"
@@ -108,7 +112,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/materials"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.master.materials.view')}>
             <MaterialMasterPage />
           </ProtectedRoute>
         }
@@ -117,7 +121,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/material-categories"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.master.categories')}>
             <ModulePlaceholderPage
               moduleName="Material Categories"
               category="Master Data"
@@ -136,7 +140,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/units"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.master.units')}>
             <ModulePlaceholderPage
               moduleName="Units of Measure (UoM)"
               category="Master Data"
@@ -155,7 +159,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/suppliers"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.master.suppliers.view')}>
             <SupplierListPage />
           </ProtectedRoute>
         }
@@ -164,7 +168,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/suppliers/:id"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.master.suppliers.view')}>
             <SupplierDetailPage />
           </ProtectedRoute>
         }
@@ -173,7 +177,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/projects"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.master.projects')}>
             <ModulePlaceholderPage
               moduleName="Construction Projects"
               category="Master Data"
@@ -192,7 +196,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/warehouses"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.master.warehouses')}>
             <ModulePlaceholderPage
               moduleName="Warehouses & Site Yards"
               category="Master Data"
@@ -212,7 +216,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/requisitions"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.requisitions.view')}>
             <RequisitionListPage />
           </ProtectedRoute>
         }
@@ -221,7 +225,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/requisitions/new"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.requisitions.write')}>
             <RequisitionFormPage />
           </ProtectedRoute>
         }
@@ -230,7 +234,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/requisitions/create"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.requisitions.write')}>
             <Navigate to="/requisitions/new" replace />
           </ProtectedRoute>
         }
@@ -239,7 +243,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/requisitions/:id"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.requisitions.view')}>
             <RequisitionDetailPage />
           </ProtectedRoute>
         }
@@ -248,7 +252,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/requisitions/:id/edit"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.requisitions.write')}>
             <RequisitionFormPage />
           </ProtectedRoute>
         }
@@ -257,7 +261,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/requisitions/:id/fulfillment"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper']}>
+          <ProtectedRoute allowedRoles={rolesForAny(['nav.requisitions.view', 'nav.inventory.issues.write'])}>
             <RequisitionFulfillmentPage />
           </ProtectedRoute>
         }
@@ -266,7 +270,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/approvals"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.requisitions.approve')}>
             <ApprovalInboxPage />
           </ProtectedRoute>
         }
@@ -276,7 +280,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/purchase-orders"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.procurement.po.view')}>
             <PurchaseOrderListPage />
           </ProtectedRoute>
         }
@@ -285,7 +289,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/purchase-orders/new"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.procurement.po.write')}>
             <PurchaseOrderFormPage />
           </ProtectedRoute>
         }
@@ -294,7 +298,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/purchase-orders/:id"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.procurement.po.view')}>
             <PurchaseOrderDetailPage />
           </ProtectedRoute>
         }
@@ -303,7 +307,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/purchase-orders/:id/edit"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.procurement.po.write')}>
             <PurchaseOrderFormPage />
           </ProtectedRoute>
         }
@@ -312,7 +316,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/purchase-orders/rate-comparison"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.procurement.rates')}>
             <RateComparisonPage />
           </ProtectedRoute>
         }
@@ -321,7 +325,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/quotations"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.procurement.rates')}>
             <RateComparisonPage />
           </ProtectedRoute>
         }
@@ -330,7 +334,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/pending-deliveries"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'Storekeeper', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.procurement.po.view')}>
             <ModulePlaceholderPage
               moduleName="Pending Deliveries"
               category="Procurement"
@@ -350,7 +354,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/grns"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.receiving.grn.view')}>
             <GrnListPage />
           </ProtectedRoute>
         }
@@ -359,7 +363,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/grns/new"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.receiving.grn.write')}>
             <CreateGrnPage />
           </ProtectedRoute>
         }
@@ -368,7 +372,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/grns/:id"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.receiving.grn.view')}>
             <GrnDetailPage />
           </ProtectedRoute>
         }
@@ -377,7 +381,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/grns/:id/edit"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.receiving.grn.write')}>
             <CreateGrnPage />
           </ProtectedRoute>
         }
@@ -387,7 +391,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/stock"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.stock')}>
             <StockBalancesPage />
           </ProtectedRoute>
         }
@@ -396,7 +400,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/inventory/balances"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.stock')}>
             <StockBalancesPage />
           </ProtectedRoute>
         }
@@ -405,7 +409,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/stock-ledger"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.ledger')}>
             <StockLedgerPage />
           </ProtectedRoute>
         }
@@ -414,7 +418,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/inventory/ledger"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.ledger')}>
             <StockLedgerPage />
           </ProtectedRoute>
         }
@@ -423,7 +427,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/inventory/reconciliation"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'AccountsOfficer', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.reconciliation')}>
             <InventoryReconciliationPage />
           </ProtectedRoute>
         }
@@ -433,7 +437,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/stock-transfers"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.transfers.view')}>
             <StockTransferListPage />
           </ProtectedRoute>
         }
@@ -442,7 +446,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/stock-transfers/new"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.transfers.write')}>
             <StockTransferFormPage />
           </ProtectedRoute>
         }
@@ -451,7 +455,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/stock-transfers/in-transit"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.transfers.view')}>
             <InTransitInventoryPage />
           </ProtectedRoute>
         }
@@ -460,7 +464,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/inventory/in-transit"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.transfers.view')}>
             <InTransitInventoryPage />
           </ProtectedRoute>
         }
@@ -469,7 +473,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/stock-transfers/discrepancies"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.transfers.view')}>
             <TransferDiscrepancyQueuePage />
           </ProtectedRoute>
         }
@@ -478,7 +482,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/stock-transfers/:id/edit"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.transfers.write')}>
             <StockTransferFormPage />
           </ProtectedRoute>
         }
@@ -487,7 +491,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/stock-transfers/:id"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager', 'AccountsOfficer', 'Auditor', 'Viewer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.transfers.view')}>
             <StockTransferDetailPage />
           </ProtectedRoute>
         }
@@ -497,7 +501,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/material-issues"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.issues.view')}>
             <MaterialIssueListPage />
           </ProtectedRoute>
         }
@@ -506,7 +510,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/material-issues/new"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.issues.write')}>
             <MaterialIssueFormPage />
           </ProtectedRoute>
         }
@@ -515,7 +519,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/material-issues/approval-inbox"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.issues.approve')}>
             <MaterialIssueApprovalInboxPage />
           </ProtectedRoute>
         }
@@ -524,7 +528,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/material-issues/:id"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.issues.view')}>
             <MaterialIssueDetailPage />
           </ProtectedRoute>
         }
@@ -534,7 +538,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/material-returns"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.returns.view')}>
             <MaterialReturnListPage />
           </ProtectedRoute>
         }
@@ -543,7 +547,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/material-returns/new"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.returns.write')}>
             <MaterialReturnFormPage />
           </ProtectedRoute>
         }
@@ -552,7 +556,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/material-returns/:id"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.inventory.returns.view')}>
             <MaterialReturnDetailPage />
           </ProtectedRoute>
         }
@@ -562,7 +566,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/reports"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.reports.centre')}>
             <ReportsCenterPage />
           </ProtectedRoute>
         }
@@ -571,7 +575,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/reports/valuation"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager', 'AccountsOfficer']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.reports.valuation')}>
             <InventoryValuationPage />
           </ProtectedRoute>
         }
@@ -580,7 +584,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/reports/consumption"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.reports.consumption')}>
             <ReportsCenterPage defaultReportType="consumption-issues-returns" />
           </ProtectedRoute>
         }
@@ -589,7 +593,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/notifications"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.notifications')}>
             <NotificationsCenterPage />
           </ProtectedRoute>
         }
@@ -599,7 +603,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/users"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin', 'InventoryManager']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.admin.users')}>
             <UsersManagementPage />
           </ProtectedRoute>
         }
@@ -608,7 +612,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/settings"
         element={
-          <ProtectedRoute allowedRoles={['SuperAdmin']}>
+          <ProtectedRoute allowedRoles={rolesFor('nav.admin.settings')}>
             <ModulePlaceholderPage
               moduleName="System Settings"
               category="Administration"
@@ -627,7 +631,7 @@ export const AppRoutes: React.FC = () => {
       <Route
         path="/architecture"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={rolesFor('nav.admin.architecture')}>
             <ArchitectureFoundationPage />
           </ProtectedRoute>
         }
@@ -642,6 +646,7 @@ export const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         }
       />
+      </Route>
     </Routes>
   );
 };

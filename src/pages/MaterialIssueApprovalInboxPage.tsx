@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckSquare, RefreshCw, Eye, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
-import { PageHeader } from '../components/common/PageHeader';
+import { RefreshCw, Eye } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
-import { StatusBadge } from '../components/common/StatusBadge';
 import { EmptyState, LoadingSpinner } from '../components/common/EmptyState';
+import { AppLayout } from '../layouts/AppLayout';
+import { useAuth } from '../app/useAuth';
 import {
   materialIssueService,
   MaterialIssue,
@@ -13,6 +13,7 @@ import {
 
 export const MaterialIssueApprovalInboxPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user, hasRole } = useAuth();
   const [pendingIssues, setPendingIssues] = useState<MaterialIssue[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,15 +22,22 @@ export const MaterialIssueApprovalInboxPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await materialIssueService.getIssues({ status: 'Submitted' });
+      // Inbox is Submitted-only; already Approved/Posted vouchers belong in the directory.
+      const res = await materialIssueService.getIssues({
+        status: 'Submitted',
+        page: 1,
+        pageSize: 100,
+      });
       if (res.success && res.data) {
         const list = Array.isArray(res.data) ? res.data : res.data.items || [];
         setPendingIssues(list);
       } else {
         setError(res.message || 'Failed to load issue approval inbox.');
+        setPendingIssues([]);
       }
     } catch (err: any) {
       setError(err.message || 'Error connecting to server.');
+      setPendingIssues([]);
     } finally {
       setIsLoading(false);
     }
@@ -52,18 +60,26 @@ export const MaterialIssueApprovalInboxPage: React.FC = () => {
     }
   };
 
-  return (
-    <div className="content-container">
-      <PageHeader
-        title="Material Issue Approval Inbox"
-        description="Review pending store dispatch vouchers and authorize site material dispatches"
-        actions={
-          <Button variant="secondary" size="sm" icon={<RefreshCw size={15} />} onClick={fetchInbox} isLoading={isLoading}>
-            Refresh Inbox
-          </Button>
-        }
-      />
+  const scopeHint =
+    hasRole(['ProjectManager']) && !hasRole(['SuperAdmin', 'InventoryManager'])
+      ? ` Scoped to your assigned projects only (${user?.projectScopes?.join(', ') || 'project scope'}). Vouchers on other projects will not appear here.`
+      : '';
 
+  return (
+    <AppLayout
+      breadcrumbs={[
+        { label: 'Dashboard', onClick: () => navigate('/dashboard') },
+        { label: 'Material Issues', onClick: () => navigate('/material-issues') },
+        { label: 'Approval Inbox', active: true },
+      ]}
+      title="Material Issue Approval Inbox"
+      description="Review pending store dispatch vouchers and authorize site material dispatches"
+      actions={
+        <Button variant="secondary" size="sm" icon={<RefreshCw size={15} />} onClick={fetchInbox} isLoading={isLoading}>
+          Refresh Inbox
+        </Button>
+      }
+    >
       {isLoading ? (
         <Card>
           <LoadingSpinner label="Fetching submitted material issues..." />
@@ -76,7 +92,7 @@ export const MaterialIssueApprovalInboxPage: React.FC = () => {
         <Card>
           <EmptyState
             title="Inbox Empty"
-            description="There are currently zero pending material issue vouchers awaiting your approval."
+            description={`No Submitted vouchers await your approval right now.${scopeHint} If a voucher was already Approved, open the Issue Directory instead.`}
             action={<Button variant="secondary" size="sm" onClick={() => navigate('/material-issues')}>View Issue Directory</Button>}
           />
         </Card>
@@ -125,6 +141,6 @@ export const MaterialIssueApprovalInboxPage: React.FC = () => {
           </div>
         </Card>
       )}
-    </div>
+    </AppLayout>
   );
 };

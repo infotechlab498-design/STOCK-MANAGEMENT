@@ -24,7 +24,7 @@ import {
   materialIssueService,
   MaterialIssue,
 } from '../services/api/materialIssueService';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 
 export const MaterialIssueListPage: React.FC = () => {
   const navigate = useNavigate();

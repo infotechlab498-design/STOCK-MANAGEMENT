@@ -70,14 +70,31 @@ const defaultUser: UserContext = {
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
 
+const SIDEBAR_COLLAPSED_KEY = 'structstock.sidebarCollapsed';
+
 export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentPage, setCurrentPage] = useState<AppPage>('dashboard');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [activeProject, setActiveProject] = useState<ProjectContext>(defaultProjects[0]);
   const [activeWarehouse, setActiveWarehouse] = useState<WarehouseContext>(defaultWarehouses[0]);
 
-  const toggleSidebar = () => setSidebarCollapsed((prev) => !prev);
+  const toggleSidebar = () =>
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore quota / private mode */
+      }
+      return next;
+    });
 
   return (
     <NavigationContext.Provider

@@ -26,7 +26,7 @@ import {
   materialIssueService,
   MaterialIssue,
 } from '../services/api/materialIssueService';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 
 export const MaterialIssueDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -151,9 +151,13 @@ export const MaterialIssueDetailPage: React.FC = () => {
   // Permission checks
   const isCreator = user?.id === issue.createdByUserId;
   const canSubmit = (issue.status === 'Draft' || issue.status === 'ReturnedForCorrection') && isCreator;
-  const canApprove = issue.status === 'Submitted' && hasRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']) && (!isCreator || hasRole(['SuperAdmin']));
+  const canApprove =
+    issue.status === 'Submitted' &&
+    hasRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']) &&
+    !isCreator;
   const canPost = issue.status === 'Approved' && hasRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']);
-  const canCreateReturn = issue.status === 'Posted' && hasRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProjectManager']);
+  const canCreateReturn =
+    issue.status === 'Posted' && hasRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']);
 
   return (
     <div className="content-container">

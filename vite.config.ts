@@ -21,13 +21,19 @@ export default defineConfig(() => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       port: 5173,
+      // Discourage browsers from caching a broken SW during local Vite sessions.
+      headers: {
+        'Cache-Control': 'no-store',
+      },
       proxy: {
+        // Pin IPv4: Node resolves "localhost" to ::1 on Windows, which causes
+        // ECONNREFUSED ::1:5080 when Kestrel is bound to 127.0.0.1 only.
         '/api': {
-          target: 'http://localhost:5080',
+          target: 'http://127.0.0.1:5080',
           changeOrigin: true,
         },
         '/hubs': {
-          target: 'http://localhost:5080',
+          target: 'http://127.0.0.1:5080',
           changeOrigin: true,
           ws: true,
         },

@@ -24,7 +24,7 @@ import {
   materialReturnService,
   MaterialReturn,
 } from '../services/api/materialReturnService';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 
 export const MaterialReturnDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();

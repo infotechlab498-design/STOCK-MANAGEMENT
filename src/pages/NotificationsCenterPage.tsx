@@ -22,7 +22,7 @@ import {
   NotificationItem,
   NotificationSeverity,
 } from '../services/api/notificationService';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 
 export const NotificationsCenterPage: React.FC = () => {
   const navigate = useNavigate();

@@ -28,13 +28,15 @@ import {
   X,
 } from 'lucide-react';
 import { useNavigation } from '../app/NavigationContext';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
+import { can, canAny, type Permission } from '../security/rolePermissions';
 
 interface SubNavItem {
   to: string;
   label: string;
   badge?: string;
-  allowedRoles?: string[];
+  permission?: Permission;
+  anyOf?: Permission[];
 }
 
 interface NavGroup {
@@ -43,7 +45,8 @@ interface NavGroup {
   icon: React.ReactNode;
   to?: string;
   items?: SubNavItem[];
-  allowedRoles?: string[];
+  permission?: Permission;
+  anyOf?: Permission[];
   badge?: string;
 }
 
@@ -55,7 +58,7 @@ export const Sidebar: React.FC = () => {
     setMobileMenuOpen,
   } = useNavigation();
 
-  const { user, hasRole } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [materialCount, setMaterialCount] = useState<string | undefined>();
@@ -120,102 +123,125 @@ export const Sidebar: React.FC = () => {
     setMobileMenuOpen(false);
   };
 
+  const roles = user?.roles;
+  const allow = (permission?: Permission, anyOf?: Permission[]) => {
+    if (anyOf?.length) return canAny(roles, anyOf);
+    if (permission) return can(roles, permission);
+    return true;
+  };
+
   const navGroups: NavGroup[] = [
     {
       id: 'dashboard',
       title: 'Dashboard Overview',
       icon: <LayoutDashboard size={18} />,
       to: '/dashboard',
+      permission: 'nav.dashboard',
     },
     {
       id: 'master',
       title: 'Master Data',
       icon: <Boxes size={18} />,
+      anyOf: [
+        'nav.master.materials.view',
+        'nav.master.categories',
+        'nav.master.units',
+        'nav.master.suppliers.view',
+        'nav.master.projects',
+        'nav.master.warehouses',
+      ],
       items: [
-        { to: '/materials', label: 'Material Master', badge: materialCount },
-        { to: '/material-categories', label: 'Categories' },
-        { to: '/units', label: 'Units of Measure' },
-        { to: '/suppliers', label: 'Suppliers' },
-        { to: '/projects', label: 'Projects' },
-        { to: '/warehouses', label: 'Warehouses & Yards' },
+        { to: '/materials', label: 'Material Master', badge: materialCount, permission: 'nav.master.materials.view' },
+        { to: '/material-categories', label: 'Categories', permission: 'nav.master.categories' },
+        { to: '/units', label: 'Units of Measure', permission: 'nav.master.units' },
+        { to: '/suppliers', label: 'Suppliers', permission: 'nav.master.suppliers.view' },
+        { to: '/projects', label: 'Projects', permission: 'nav.master.projects' },
+        { to: '/warehouses', label: 'Warehouses & Yards', permission: 'nav.master.warehouses' },
       ],
     },
     {
       id: 'requisitions',
       title: 'Material Requisitions',
       icon: <ClipboardList size={18} />,
+      anyOf: ['nav.requisitions.view', 'nav.requisitions.approve'],
       items: [
-        { to: '/requisitions', label: 'Site Requisitions' },
-        { to: '/approvals', label: 'Pending Approvals', badge: pendingApprovals },
+        { to: '/requisitions', label: 'Site Requisitions', permission: 'nav.requisitions.view' },
+        { to: '/approvals', label: 'Pending Approvals', badge: pendingApprovals, permission: 'nav.requisitions.approve' },
       ],
-      allowedRoles: ['SuperAdmin', 'InventoryManager', 'ProjectManager', 'Storekeeper'],
     },
     {
       id: 'procurement',
       title: 'Procurement',
       icon: <FileCheck size={18} />,
+      anyOf: ['nav.procurement.po.view', 'nav.procurement.rates'],
       items: [
-        { to: '/purchase-orders', label: 'Purchase Orders (PO)' },
-        { to: '/purchase-orders/rate-comparison', label: 'Rate Comparison' },
-        { to: '/pending-deliveries', label: 'Pending Deliveries' },
+        { to: '/purchase-orders', label: 'Purchase Orders (PO)', permission: 'nav.procurement.po.view' },
+        { to: '/purchase-orders/rate-comparison', label: 'Rate Comparison', permission: 'nav.procurement.rates' },
+        { to: '/pending-deliveries', label: 'Pending Deliveries', permission: 'nav.procurement.po.view' },
       ],
-      allowedRoles: ['SuperAdmin', 'InventoryManager', 'ProcurementOfficer', 'ProjectManager'],
     },
     {
       id: 'receiving',
       title: 'Goods Receiving',
       icon: <Truck size={18} />,
+      anyOf: ['nav.receiving.grn.view', 'nav.receiving.grn.write'],
       items: [
-        { to: '/grns', label: 'Goods Received Notes' },
-        { to: '/grns/new', label: 'New Goods Receipt', allowedRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer'] },
+        { to: '/grns', label: 'Goods Received Notes', permission: 'nav.receiving.grn.view' },
+        { to: '/grns/new', label: 'New Goods Receipt', permission: 'nav.receiving.grn.write' },
       ],
-      allowedRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer', 'ProjectManager'],
     },
     {
       id: 'inventory',
       title: 'Inventory & Stock',
       icon: <Layers size={18} />,
-      items: [
-        { to: '/stock', label: 'Stock Balances' },
-        { to: '/stock-ledger', label: 'Authoritative Ledger' },
-        { to: '/stock-transfers', label: 'Inter-Site Transfers' },
-        { to: '/stock-transfers/in-transit', label: 'In-Transit Inventory' },
-        { to: '/stock-transfers/discrepancies', label: 'Transfer Discrepancies' },
-        { to: '/material-issues', label: 'Material Issues' },
-        { to: '/material-returns', label: 'Material Returns' },
+      anyOf: [
+        'nav.inventory.stock',
+        'nav.inventory.ledger',
+        'nav.inventory.transfers.view',
+        'nav.inventory.issues.view',
+        'nav.inventory.returns.view',
       ],
-      allowedRoles: ['SuperAdmin', 'InventoryManager', 'Storekeeper', 'AccountsOfficer', 'ProjectManager', 'Auditor', 'Viewer'],
+      items: [
+        { to: '/stock', label: 'Stock Balances', permission: 'nav.inventory.stock' },
+        { to: '/stock-ledger', label: 'Authoritative Ledger', permission: 'nav.inventory.ledger' },
+        { to: '/stock-transfers', label: 'Inter-Site Transfers', permission: 'nav.inventory.transfers.view' },
+        { to: '/stock-transfers/in-transit', label: 'In-Transit Inventory', permission: 'nav.inventory.transfers.view' },
+        { to: '/stock-transfers/discrepancies', label: 'Transfer Discrepancies', permission: 'nav.inventory.transfers.view' },
+        { to: '/material-issues', label: 'Material Issues', permission: 'nav.inventory.issues.view' },
+        {
+          to: '/material-issues/approval-inbox',
+          label: 'Issue Approval Inbox',
+          permission: 'nav.inventory.issues.approve',
+        },
+        { to: '/material-returns', label: 'Material Returns', permission: 'nav.inventory.returns.view' },
+      ],
     },
     {
       id: 'reports',
       title: 'Reports & Valuation',
       icon: <FilePieChart size={18} />,
+      anyOf: ['nav.reports.centre', 'nav.reports.valuation', 'nav.notifications'],
       items: [
-        { to: '/reports', label: 'Reports & Export Centre' },
-        { to: '/reports/valuation', label: 'Valuation (WAC)', allowedRoles: ['SuperAdmin', 'InventoryManager', 'AccountsOfficer'] },
-        { to: '/reports/consumption', label: 'Site Consumption' },
-        { to: '/notifications', label: 'Action & Notifications' },
+        { to: '/reports', label: 'Reports & Export Centre', permission: 'nav.reports.centre' },
+        { to: '/reports/valuation', label: 'Valuation (WAC)', permission: 'nav.reports.valuation' },
+        { to: '/reports/consumption', label: 'Site Consumption', permission: 'nav.reports.consumption' },
+        { to: '/notifications', label: 'Action & Notifications', permission: 'nav.notifications' },
       ],
-      allowedRoles: ['SuperAdmin', 'InventoryManager', 'AccountsOfficer', 'ProjectManager', 'Storekeeper', 'ProcurementOfficer', 'Auditor', 'Viewer'],
     },
     {
       id: 'admin',
       title: 'Administration',
       icon: <Settings size={18} />,
+      anyOf: ['nav.admin.users', 'nav.admin.settings', 'nav.admin.architecture'],
       items: [
-        { to: '/users', label: 'Users & Access Control', badge: 'RBAC', allowedRoles: ['SuperAdmin', 'InventoryManager'] },
-        { to: '/settings', label: 'System Settings', allowedRoles: ['SuperAdmin'] },
-        { to: '/architecture', label: 'Architecture & Tokens' },
+        { to: '/users', label: 'Users & Access Control', badge: 'RBAC', permission: 'nav.admin.users' },
+        { to: '/settings', label: 'System Settings', permission: 'nav.admin.settings' },
+        { to: '/architecture', label: 'Architecture & Tokens', permission: 'nav.admin.architecture' },
       ],
-      allowedRoles: ['SuperAdmin', 'InventoryManager', 'Viewer'],
     },
   ];
 
-  // Filter groups by user permissions
-  const filteredGroups = navGroups.filter((group) => {
-    if (!group.allowedRoles) return true;
-    return hasRole(group.allowedRoles);
-  });
+  const filteredGroups = navGroups.filter((group) => allow(group.permission, group.anyOf));
 
   return (
     <>
@@ -310,10 +336,9 @@ export const Sidebar: React.FC = () => {
               }
 
               // Group with children
-              const visibleSubItems = (group.items || []).filter((item) => {
-                if (!item.allowedRoles) return true;
-                return hasRole(item.allowedRoles);
-              });
+              const visibleSubItems = (group.items || []).filter((item) =>
+                allow(item.permission, item.anyOf)
+              );
 
               if (visibleSubItems.length === 0) return null;
 

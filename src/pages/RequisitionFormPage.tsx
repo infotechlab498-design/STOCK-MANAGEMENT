@@ -9,7 +9,7 @@ import {
   AlertCircle,
   Info,
 } from 'lucide-react';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { AppLayout } from '../layouts/AppLayout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';

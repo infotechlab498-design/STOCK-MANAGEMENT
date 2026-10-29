@@ -17,7 +17,7 @@ import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
 import { LoadingSpinner } from '../components/common/EmptyState';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { purchaseOrderService, PurchaseOrderDto, PurchaseOrderItemDto } from '../services/api/purchaseOrderService';
 import { grnService, CreateGrnPayload } from '../services/api/grnService';
 

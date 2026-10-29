@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Menu, Building, Warehouse, ShieldCheck } from 'lucide-react';
 import { useNavigation } from '../app/NavigationContext';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { NotificationBell } from '../components/common/NotificationBell';
 import { UserProfileMenu } from '../components/common/UserProfileMenu';
 import { SearchInput } from '../components/common/SearchInput';
@@ -28,7 +28,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleMobileMenu }) => {
   const toggleMobile = onToggleMobileMenu || (() => setMobileMenuOpen(!mobileMenuOpen));
 
   // Role-based project and warehouse scopes
-  const isGlobalUser = hasRole(['SuperAdmin', 'InventoryManager']);
+  const isGlobalUser = hasRole(['SuperAdmin', 'InventoryManager', 'AccountsOfficer']);
   const userProjects = isGlobalUser || !user
     ? availableProjects
     : availableProjects.filter((p) => user.projectScopes.includes(p.id));

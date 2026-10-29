@@ -23,7 +23,7 @@ public partial class InventoryApp
 
     public async Task<object> CreateIssueAsync(IssueWriteRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper", "ProjectManager");
+        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper");
         var requisition = await LoadRequisition(req.RequisitionId!, ct)
             ?? throw new AppException(400, "Approved requisition is required");
         if (requisition.Status != "Approved") throw new AppException(400, "Requisition must be Approved");
@@ -236,7 +236,7 @@ public partial class InventoryApp
 
     public async Task<object> CreateReturnAsync(ReturnWriteRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper", "ProjectManager");
+        _me.RequireRole("SuperAdmin", "InventoryManager", "Storekeeper");
         var issue = await LoadIssue(req.MaterialIssueId!, ct)
             ?? throw new AppException(400, "Posted material issue is required");
         if (issue.Status != "Posted") throw new AppException(400, "Can only return against Posted issues");

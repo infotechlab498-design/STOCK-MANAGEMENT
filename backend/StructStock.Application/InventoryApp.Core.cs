@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using StructStock.Domain;
 using StructStock.Infrastructure;
@@ -9,13 +10,15 @@ public partial class InventoryApp
     private readonly AppDbContext _db;
     private readonly ICurrentUser _me;
     private readonly ILiveEvents _live;
+    private readonly UserManager<AppUser> _userManager;
     private readonly List<Func<CancellationToken, Task>> _after = new();
 
-    public InventoryApp(AppDbContext db, ICurrentUser me, ILiveEvents live)
+    public InventoryApp(AppDbContext db, ICurrentUser me, ILiveEvents live, UserManager<AppUser> userManager)
     {
         _db = db;
         _me = me;
         _live = live;
+        _userManager = userManager;
     }
 
     private void After(Func<CancellationToken, Task> action) => _after.Add(action);

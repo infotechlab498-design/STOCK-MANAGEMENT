@@ -16,7 +16,7 @@ import {
   Eye,
   X,
 } from 'lucide-react';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { AppLayout } from '../layouts/AppLayout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -29,6 +29,65 @@ import {
 } from '../services/api/purchaseOrderService';
 import { supplierService, SupplierDto } from '../services/api/supplierService';
 import { materialService, Material } from '../services/api/materialService';
+
+const money = (value: unknown, digits = 2): string => {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : (0).toFixed(digits);
+};
+
+const normalizeComparisons = (raw: unknown): RateComparisonItemDto[] => {
+  const list = Array.isArray(raw) ? raw : [];
+  return list.map((item: any) => {
+    const quotes = (Array.isArray(item?.quotes) ? item.quotes : []).map((q: any) => {
+      const qty = Number(q?.quotedQuantity) || 0;
+      const unitRate = Number(q?.unitRate) || 0;
+      const discount = Number(q?.discount) || 0;
+      const taxRate = Number(q?.taxRate) || 0;
+      const estimatedFreight = Number(q?.estimatedFreight) || 0;
+      const taxable = Math.max(0, qty * unitRate - discount);
+      const lineTotal = Number(
+        (taxable + taxable * (taxRate / 100) + estimatedFreight).toFixed(2)
+      );
+      const effectiveUnitCost =
+        qty > 0 ? Number((lineTotal / qty).toFixed(4)) : unitRate;
+      return {
+        quotationId: String(q?.quotationId || ''),
+        quotationReference: String(q?.quotationReference || ''),
+        supplierId: String(q?.supplierId || ''),
+        supplierName: String(q?.supplierName || 'Unknown supplier'),
+        validUntil: String(q?.validUntil || '—'),
+        quotedQuantity: qty,
+        unitRate,
+        discount,
+        taxRate,
+        estimatedFreight,
+        lineTotal,
+        effectiveUnitCost,
+      };
+    }).sort((a: { effectiveUnitCost: number }, b: { effectiveUnitCost: number }) =>
+      a.effectiveUnitCost - b.effectiveUnitCost
+    );
+
+    const lowestEffectiveRate =
+      Number(item?.lowestEffectiveRate) ||
+      quotes[0]?.effectiveUnitCost ||
+      0;
+    const lowestRateSupplier =
+      item?.lowestRateSupplier ||
+      quotes[0]?.supplierName ||
+      'N/A';
+
+    return {
+      materialId: String(item?.materialId || ''),
+      materialCode: String(item?.materialCode || ''),
+      materialName: String(item?.materialName || 'Material'),
+      unitCode: String(item?.unitCode || ''),
+      lowestRateSupplier,
+      lowestEffectiveRate,
+      quotes,
+    };
+  }).filter((item) => item.materialId && item.quotes.length > 0);
+};
 
 export const RateComparisonPage: React.FC = () => {
   const navigate = useNavigate();
@@ -66,12 +125,13 @@ export const RateComparisonPage: React.FC = () => {
         supplierService.getSuppliers({ status: 'ACTIVE' }),
         materialService.getMaterials(undefined, undefined, 'ACTIVE'),
       ]);
-      setComparisons(compData || []);
-      setQuotations(quoteData || []);
-      setSuppliers(supData || []);
-      setMaterials(matDataRes.data || []);
+      setComparisons(normalizeComparisons(compData));
+      setQuotations(Array.isArray(quoteData) ? quoteData : []);
+      setSuppliers(Array.isArray(supData) ? supData : []);
+      setMaterials(matDataRes?.data || []);
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.message || 'Failed to load supplier rates.');
+      setComparisons([]);
     } finally {
       setIsLoading(false);
     }
@@ -260,7 +320,7 @@ export const RateComparisonPage: React.FC = () => {
                         gap: 4,
                       }}
                     >
-                      <TrendingDown size={14} /> Lowest Rate: ${item.lowestEffectiveRate.toFixed(2)} ({item.lowestRateSupplier})
+                      <TrendingDown size={14} /> Lowest Rate: ${money(item.lowestEffectiveRate)} ({item.lowestRateSupplier || 'N/A'})
                     </span>
                   </div>
                 }
@@ -296,11 +356,11 @@ export const RateComparisonPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {item.quotes.map((quote, qIdx) => {
+                      {(item.quotes || []).map((quote, qIdx) => {
                         const isLowest = qIdx === 0;
                         return (
                           <tr
-                            key={quote.quotationId + qIdx}
+                            key={`${quote.quotationId}-${qIdx}`}
                             style={{
                               borderBottom: '1px solid var(--color-border)',
                               backgroundColor: isLowest ? 'rgba(238, 248, 242, 0.4)' : undefined,
@@ -323,16 +383,16 @@ export const RateComparisonPage: React.FC = () => {
                               Until {quote.validUntil}
                             </td>
                             <td style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'right', fontWeight: 500 }}>
-                              ${quote.unitRate.toFixed(2)}
+                              ${money(quote.unitRate)}
                             </td>
                             <td style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'right', color: 'var(--color-charcoal-600)' }}>
-                              {quote.taxRate}%
+                              {Number(quote.taxRate) || 0}%
                             </td>
                             <td style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'right', color: 'var(--color-charcoal-600)' }}>
-                              ${quote.estimatedFreight.toFixed(2)}
+                              ${money(quote.estimatedFreight)}
                             </td>
                             <td style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'right', fontWeight: 700, color: isLowest ? '#22543D' : 'var(--color-charcoal-900)' }}>
-                              ${quote.effectiveUnitCost.toFixed(2)} / {item.unitCode}
+                              ${money(quote.effectiveUnitCost)} / {item.unitCode}
                             </td>
                             <td style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'right' }}>
                               {canManageProcurement && (

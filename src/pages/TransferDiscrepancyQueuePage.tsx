@@ -6,7 +6,7 @@ import { Button } from '../components/common/Button';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { LoadingSpinner, EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/StateViews';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import {
   stockTransferService,
   TransferDiscrepancyItem,

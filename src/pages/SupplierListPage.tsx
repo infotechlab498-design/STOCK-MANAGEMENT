@@ -18,7 +18,7 @@ import {
   MapPin,
   FileCheck,
 } from 'lucide-react';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { AppLayout } from '../layouts/AppLayout';
 import { Card } from '../components/common/Card';
 import { StatCard } from '../components/common/StatCard';
@@ -63,7 +63,7 @@ export const SupplierListPage: React.FC = () => {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const canManageSuppliers = hasRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']);
+  const canManageSuppliers = hasRole(['SuperAdmin', 'ProcurementOfficer']);
 
   const fetchSuppliers = useCallback(async () => {
     setIsLoading(true);

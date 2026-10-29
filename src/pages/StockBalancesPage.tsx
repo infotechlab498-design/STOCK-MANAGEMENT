@@ -13,30 +13,31 @@ import {
   Layers,
   X,
 } from 'lucide-react';
-import { PageHeader } from '../components/common/PageHeader';
 import { StatCard } from '../components/common/StatCard';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { EmptyState, LoadingSpinner } from '../components/common/EmptyState';
-import { Breadcrumbs } from '../components/common/Breadcrumbs';
+import { AppLayout } from '../layouts/AppLayout';
 import {
   inventoryService,
   InventoryBalance,
   InventoryBalancesResponse,
 } from '../services/api/inventoryService';
 
+const EMPTY_METRICS: InventoryBalancesResponse['metrics'] = {
+  totalMaterials: 0,
+  totalLocations: 0,
+  totalInventoryValue: 0,
+  totalQuantityOnHand: 0,
+  lowStockCount: 0,
+};
+
 export const StockBalancesPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [balances, setBalances] = useState<InventoryBalance[]>([]);
-  const [metrics, setMetrics] = useState<InventoryBalancesResponse['metrics']>({
-    totalMaterials: 0,
-    totalLocations: 0,
-    totalInventoryValue: 0,
-    totalQuantityOnHand: 0,
-    lowStockCount: 0,
-  });
+  const [metrics, setMetrics] = useState<InventoryBalancesResponse['metrics']>(EMPTY_METRICS);
 
   const [pageIndex, setPageIndex] = useState<number>(
     parseInt(searchParams.get('page') || '1', 10)
@@ -82,11 +83,12 @@ export const StockBalancesPage: React.FC = () => {
 
       if (res.success && res.data) {
         setBalances(res.data.items || []);
-        setMetrics(res.data.metrics);
-        setTotalCount(res.data.totalCount);
-        setTotalPages(res.data.totalPages);
+        setMetrics(res.data.metrics ?? EMPTY_METRICS);
+        setTotalCount(res.data.totalCount ?? 0);
+        setTotalPages(res.data.totalPages ?? 1);
       } else {
         setError(res.message || 'Failed to load stock balances.');
+        setMetrics(EMPTY_METRICS);
       }
     } catch (err: any) {
       setError(err.message || 'Error connecting to server.');
@@ -138,41 +140,39 @@ export const StockBalancesPage: React.FC = () => {
     }).format(val || 0);
   };
 
-  return (
-    <div className="content-container">
-      <Breadcrumbs
-        items={[
-          { label: 'Dashboard', onClick: () => navigate('/dashboard') },
-          { label: 'Inventory & Stock' },
-          { label: 'Stock Balances' },
-        ]}
-      />
-      <PageHeader
-        title="Stock Balances & Inventory Levels"
-        description="Real-time on-hand, reserved, and available quantities by warehouse and site location with moving WAC"
-        actions={
-          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<RefreshCw size={15} />}
-              onClick={fetchBalances}
-              isLoading={isLoading}
-            >
-              Refresh
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<Layers size={15} />}
-              onClick={() => navigate('/stock-ledger')}
-            >
-              Authoritative Ledger
-            </Button>
-          </div>
-        }
-      />
+  const safeMetrics = metrics ?? EMPTY_METRICS;
 
+  return (
+    <AppLayout
+      breadcrumbs={[
+        { label: 'Dashboard', onClick: () => navigate('/dashboard') },
+        { label: 'Inventory & Stock' },
+        { label: 'Stock Balances', active: true },
+      ]}
+      title="Stock Balances & Inventory Levels"
+      description="Real-time on-hand, reserved, and available quantities by warehouse and site location with moving WAC"
+      actions={
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<RefreshCw size={15} />}
+            onClick={fetchBalances}
+            isLoading={isLoading}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Layers size={15} />}
+            onClick={() => navigate('/stock-ledger')}
+          >
+            Authoritative Ledger
+          </Button>
+        </div>
+      }
+    >
       {/* KPI Stats Grid */}
       <div
         style={{
@@ -184,30 +184,30 @@ export const StockBalancesPage: React.FC = () => {
       >
         <StatCard
           label="Total Inventory Value"
-          value={formatCurrency(metrics.totalInventoryValue)}
+          value={formatCurrency(safeMetrics.totalInventoryValue)}
           icon={<DollarSign size={20} />}
           accent="orange"
           meta="Continuous Moving WAC Valuation"
         />
         <StatCard
           label="Total On-Hand Quantity"
-          value={metrics.totalQuantityOnHand.toLocaleString('en-US')}
+          value={(safeMetrics.totalQuantityOnHand || 0).toLocaleString('en-US')}
           icon={<Boxes size={20} />}
           accent="charcoal"
-          meta={`${metrics.totalMaterials} Distinct Materials`}
+          meta={`${safeMetrics.totalMaterials || 0} Distinct Materials`}
         />
         <StatCard
           label="Active Locations"
-          value={metrics.totalLocations}
+          value={safeMetrics.totalLocations || 0}
           icon={<Warehouse size={20} />}
           accent="charcoal"
           meta="Warehouses & Site Storage Yards"
         />
         <StatCard
           label="Low Stock Alerts"
-          value={metrics.lowStockCount}
+          value={safeMetrics.lowStockCount || 0}
           icon={<AlertTriangle size={20} />}
-          accent={metrics.lowStockCount > 0 ? 'orange' : 'success'}
+          accent={(safeMetrics.lowStockCount || 0) > 0 ? 'orange' : 'success'}
           meta="Below Global Master Thresholds"
         />
       </div>
@@ -717,6 +717,6 @@ export const StockBalancesPage: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </AppLayout>
   );
 };

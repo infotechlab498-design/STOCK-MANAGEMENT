@@ -507,7 +507,10 @@
         },
         "runtime": {
           "bin/placeholder/StructStock.Application.dll": {}
-        }
+        },
+        "frameworkReferences": [
+          "Microsoft.AspNetCore.App"
+        ]
       },
       "StructStock.Domain/1.0.0": {
         "type": "project",
@@ -531,7 +534,10 @@
         },
         "runtime": {
           "bin/placeholder/StructStock.Infrastructure.dll": {}
-        }
+        },
+        "frameworkReferences": [
+          "Microsoft.AspNetCore.App"
+        ]
       }
     }
   },

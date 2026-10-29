@@ -6,27 +6,31 @@ The React app stays in `STOCK-MANAGEMENT/src`. Data is no longer stored in JSON 
 
 | Piece | Where | Port |
 | --- | --- | --- |
-| SQL Server database `StructStock` | Local SQL Server Express | 1433 (instance `SQLEXPRESS`) |
-| ASP.NET Core API | `backend/StructStock.Api` | `http://localhost:5080` |
+| SQL Server database `StructStock` | Local SQL Server Express | instance `DESKTOP-0Q9OHVL\SQLEXPRESS01` |
+| ASP.NET Core API | `backend/StructStock.Api` | `http://127.0.0.1:5080` (IPv4) |
 | React (Vite) | repository root | `http://localhost:5173` |
-| SignalR hub | `/hubs/inventory` on the API | proxied by Vite |
+| SignalR hub | `/hubs/inventory` on the API | proxied by Vite to `127.0.0.1:5080` |
 
-This machine has SQL Server Express instances `SQLEXPRESS` and `SQLEXPRESS01`. The development connection string uses `localhost\SQLEXPRESS`. If you use a default instance, change `ConnectionStrings:SqlServer` in `backend/StructStock.Api/appsettings.Development.json`.
+Development targets `DESKTOP-0Q9OHVL\SQLEXPRESS01` (Windows Authentication). The Vite proxy and `dotnet run` URLs use **`127.0.0.1`** (not `localhost`) to avoid Windows `ECONNREFUSED ::1:5080`. Override SQL via user secrets or `ConnectionStrings:SqlServer` in `backend/StructStock.Api/appsettings.Development.json` if your instance name differs.
+
+Authentication uses ASP.NET Core Identity **bridged** to existing `AppUser` / `Role` / `UserRole` tables (no `AspNet*` schema). Passwords stay in the StructStock PBKDF2 `salt:hash` format via `CompatPasswordHasher`.
 
 ```
-Server=localhost\SQLEXPRESS;Database=StructStock;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True
+Server=DESKTOP-0Q9OHVL\SQLEXPRESS01;Database=StructStock;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True
 ```
+
+Health checks (no credentials returned): `GET /health`, `GET /health/db`.
 
 ## Create the database in SSMS
 
-1. Open SQL Server Management Studio and connect to `localhost\SQLEXPRESS` with Windows authentication.
+1. Open SQL Server Management Studio and connect to `DESKTOP-0Q9OHVL\SQLEXPRESS01` with Windows authentication.
 2. Open and execute these scripts in order:
    - `backend/database/001_schema.sql`
    - `backend/database/002_seed.sql`
    - `backend/database/003_indexes.sql`
 3. Refresh Databases. `StructStock` should contain the tables listed below, plus the demo users and master data.
 
-The API can also apply the same scripts on startup when the database is empty (`Database:ApplyScriptsOnStartup` is `true` in Development). Running the scripts yourself in SSMS is the supported install path.
+`Database:ApplyScriptsOnStartup` is **false** by default so the API does not re-run schema/seed scripts. Prefer applying scripts yourself in SSMS.
 
 ## Tables
 

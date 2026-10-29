@@ -26,7 +26,7 @@ import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { LoadingSpinner } from '../components/common/EmptyState';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import {
   grnService,
   GoodsReceivedNoteDto,
@@ -72,8 +72,9 @@ export const GrnDetailPage: React.FC = () => {
 
   const isSuperAdmin = hasRole(['SuperAdmin']);
   const isManager = hasRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']);
-  const canPost = hasRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']);
-  const canInspect = hasRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'ProcurementOfficer']);
+  // Finance may post to ledger; store/IM handle physical receive + post
+  const canPost = hasRole(['SuperAdmin', 'InventoryManager', 'Storekeeper', 'AccountsOfficer']);
+  const canInspect = hasRole(['SuperAdmin', 'InventoryManager', 'Storekeeper']);
 
   const loadGrn = useCallback(async () => {
     if (!id) return;
@@ -301,7 +302,7 @@ export const GrnDetailPage: React.FC = () => {
             </Button>
           )}
 
-          {grn.status === 'Approved' && canPost && (
+          {(grn.status === 'Inspected' || grn.status === 'Approved') && canPost && (
             <Button
               variant="primary"
               onClick={() => setModalType('Post')}
@@ -309,7 +310,7 @@ export const GrnDetailPage: React.FC = () => {
               icon={<Layers size={16} />}
               style={{ backgroundColor: 'var(--color-primary, #DD6B20)', borderColor: '#DD6B20' }}
             >
-              Post to Receipt Ledger
+              Post to Stock & Receipt Ledger
             </Button>
           )}
 
@@ -355,7 +356,8 @@ export const GrnDetailPage: React.FC = () => {
         <div className="mb-6 p-4 bg-yellow-50 border border-yellow-300 text-yellow-900 text-sm flex items-center gap-2">
           <AlertTriangle size={18} className="text-yellow-600 flex-shrink-0" />
           <span>
-            <strong>Dual-Control Policy:</strong> You recorded this physical delivery intake ({grn.receivedByName}). An independent Project Manager or Inventory Manager must review and approve this GRN.
+            <strong>Dual-Control Policy:</strong> You recorded this physical delivery intake ({grn.receivedByName}). An independent Project Manager or Inventory Manager must approve this GRN.
+            Stock balances update only after <strong>Post to Stock & Receipt Ledger</strong> (available once inspected/approved)—approval alone does not increase on-hand qty.
           </span>
         </div>
       )}
@@ -799,7 +801,10 @@ export const GrnDetailPage: React.FC = () => {
               {modalType === 'Approve' && 'Confirm approval of this inspected Goods Received Note. Stock will be ready for receipt ledger posting.'}
               {modalType === 'Reject' && 'Rejecting this delivery intake will cancel the receipt note and retain audit justification.'}
               {modalType === 'Return' && 'Return this draft to the storekeeper with revision instructions.'}
-              {modalType === 'Post' && 'Posting will update the durable receipt ledger and increment cumulative received quantities on Purchase Order ' + grn.purchaseOrderNumber + '.'}
+              {modalType === 'Post' &&
+                'Posting will write inventory ledger entries, update stock balances (on-hand / WAC), and increment received quantities on Purchase Order ' +
+                  grn.purchaseOrderNumber +
+                  '.'}
             </p>
 
             {actionError && (

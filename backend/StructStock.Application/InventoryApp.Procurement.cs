@@ -79,7 +79,7 @@ public partial class InventoryApp
 
     public async Task<object> CreatePurchaseOrderAsync(PoWriteRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "ProcurementOfficer");
         var supplier = await _db.Suppliers.FirstOrDefaultAsync(s => s.Id == req.SupplierId && s.IsActive, ct)
             ?? throw new AppException(400, "Active supplier is required");
         var project = await _db.Projects.FirstOrDefaultAsync(p => p.Id == req.ProjectId && p.IsActive, ct)
@@ -113,7 +113,17 @@ public partial class InventoryApp
 
         foreach (var item in req.Items)
         {
-            var material = await _db.Materials.Include(m => m.BaseUnit).FirstAsync(m => m.Id == item.MaterialId, ct);
+            if (string.IsNullOrWhiteSpace(item.MaterialId))
+                throw new AppException(400, "Each PO line requires a materialId.");
+            if (item.OrderedQuantity <= 0)
+                throw new AppException(400, "Ordered quantity must be greater than zero.");
+            if (item.UnitRate < 0 || item.LineDiscount < 0 || item.TaxRate < 0)
+                throw new AppException(400, "Unit rate, discount, and tax rate must be non-negative.");
+
+            var material = await _db.Materials.Include(m => m.BaseUnit)
+                .FirstOrDefaultAsync(m => m.Id == item.MaterialId, ct)
+                ?? throw new AppException(400, $"Material '{item.MaterialId}' was not found.");
+
             var lineSub = Money.Round2(item.OrderedQuantity * item.UnitRate - item.LineDiscount);
             var tax = Money.Round2(lineSub * item.TaxRate / 100m);
             po.Lines.Add(new PurchaseOrderLine
@@ -121,7 +131,7 @@ public partial class InventoryApp
                 Id = Ids.New("POL"),
                 PurchaseOrderId = po.Id,
                 MaterialId = material.Id,
-                RequisitionLineId = item.RequisitionItemId,
+                RequisitionLineId = string.IsNullOrWhiteSpace(item.RequisitionItemId) ? null : item.RequisitionItemId,
                 OrderedQuantity = item.OrderedQuantity,
                 UnitRate = item.UnitRate,
                 LineDiscount = item.LineDiscount,
@@ -146,7 +156,7 @@ public partial class InventoryApp
 
     public async Task<object> UpdatePurchaseOrderAsync(string id, PoWriteRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "ProcurementOfficer");
         var po = await LoadPo(id, ct) ?? throw new AppException(404, "Purchase order not found");
         if (po.Status is not ("Draft" or "Rejected")) throw new AppException(400, "Only Draft or Rejected POs can be edited");
         if (!string.IsNullOrWhiteSpace(req.DeliveryLocation)) po.DeliveryLocation = req.DeliveryLocation.Trim();
@@ -192,7 +202,7 @@ public partial class InventoryApp
 
     public async Task<object> SubmitPurchaseOrderAsync(string id, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "ProcurementOfficer");
         var po = await LoadPo(id, ct) ?? throw new AppException(404, "Purchase order not found");
         if (po.Status != "Draft") throw new AppException(400, "Only Draft POs can be submitted");
         po.Status = "PendingApproval";
@@ -204,7 +214,7 @@ public partial class InventoryApp
 
     public async Task<object> ApprovePurchaseOrderAsync(string id, string? comments, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProjectManager");
+        _me.RequireRole("SuperAdmin", "ProjectManager");
         var po = await LoadPo(id, ct) ?? throw new AppException(404, "Purchase order not found");
         if (po.Status != "PendingApproval") throw new AppException(400, "Only PendingApproval POs can be approved");
         await EnsureCanApprove(po.CreatedByUserId, ct);
@@ -219,7 +229,7 @@ public partial class InventoryApp
 
     public async Task<object> RejectPurchaseOrderAsync(string id, string? reason, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProjectManager");
+        _me.RequireRole("SuperAdmin", "ProjectManager");
         var po = await LoadPo(id, ct) ?? throw new AppException(404, "Purchase order not found");
         if (po.Status != "PendingApproval") throw new AppException(400, "Only PendingApproval POs can be rejected");
         await EnsureCanApprove(po.CreatedByUserId, ct);
@@ -232,7 +242,7 @@ public partial class InventoryApp
 
     public async Task<object> IssuePurchaseOrderAsync(string id, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "ProcurementOfficer");
         var po = await LoadPo(id, ct) ?? throw new AppException(404, "Purchase order not found");
         if (po.Status != "Approved") throw new AppException(400, "Only Approved POs can be issued");
         po.Status = "Issued";
@@ -250,7 +260,7 @@ public partial class InventoryApp
 
     public async Task<object> CancelPurchaseOrderAsync(string id, string? reason, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "ProcurementOfficer");
         var po = await LoadPo(id, ct) ?? throw new AppException(404, "Purchase order not found");
         if (po.Status is "FullyReceived" or "Cancelled") throw new AppException(400, "Cannot cancel this PO");
         po.Status = "Cancelled";
@@ -286,7 +296,7 @@ public partial class InventoryApp
 
     public async Task<object> CreateQuotationAsync(QuotationWriteRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "ProcurementOfficer");
         var supplier = await _db.Suppliers.FirstOrDefaultAsync(s => s.Id == req.SupplierId, ct)
             ?? throw new AppException(400, "Supplier required");
         var settings = await Settings(ct);
@@ -316,7 +326,10 @@ public partial class InventoryApp
                 Discount = item.Discount,
                 TaxRate = item.TaxRate,
                 EstimatedFreight = item.EstimatedFreight,
-                LineTotal = Money.Round2(item.QuotedQuantity * item.UnitRate - item.Discount + item.EstimatedFreight),
+                LineTotal = Money.Round2(
+                    Math.Max(0m, item.QuotedQuantity * item.UnitRate - item.Discount)
+                    + Money.Round2(Math.Max(0m, item.QuotedQuantity * item.UnitRate - item.Discount) * item.TaxRate / 100m)
+                    + item.EstimatedFreight),
                 Material = material
             });
         }
@@ -331,41 +344,101 @@ public partial class InventoryApp
         var list = await _db.Quotations.Include(q => q.Supplier)
             .Include(q => q.Lines).ThenInclude(l => l.Material).ThenInclude(m => m!.BaseUnit)
             .AsNoTracking().ToListAsync(ct);
-        var materialMap = new Dictionary<string, object>();
+
+        var groups = new Dictionary<string, (
+            string MaterialId,
+            string MaterialCode,
+            string MaterialName,
+            string UnitCode,
+            List<(
+                string QuotationId,
+                string QuotationReference,
+                string SupplierId,
+                string SupplierName,
+                string ValidUntil,
+                decimal QuotedQuantity,
+                decimal UnitRate,
+                decimal Discount,
+                decimal TaxRate,
+                decimal EstimatedFreight,
+                decimal LineTotal,
+                decimal EffectiveUnitCost
+            )> Quotes)>();
+
         foreach (var q in list)
         {
             foreach (var item in q.Lines)
             {
-                if (!materialMap.TryGetValue(item.MaterialId, out var entryObj))
+                if (!groups.TryGetValue(item.MaterialId, out var group))
                 {
-                    entryObj = new Dictionary<string, object?>
-                    {
-                        ["materialId"] = item.MaterialId,
-                        ["materialCode"] = item.Material?.ItemCode ?? "",
-                        ["materialName"] = item.Material?.Name ?? "",
-                        ["unitCode"] = item.Material?.BaseUnit?.Code ?? "",
-                        ["quotes"] = new List<object>()
-                    };
-                    materialMap[item.MaterialId] = entryObj;
+                    group = (
+                        item.MaterialId,
+                        item.Material?.ItemCode ?? "",
+                        item.Material?.Name ?? "",
+                        item.Material?.BaseUnit?.Code ?? "",
+                        new List<(string, string, string, string, string, decimal, decimal, decimal, decimal, decimal, decimal, decimal)>()
+                    );
+                    groups[item.MaterialId] = group;
                 }
 
-                ((List<object>)((Dictionary<string, object?>)entryObj)["quotes"]!).Add(new
-                {
-                    quotationId = q.Id,
-                    quotationReference = q.QuotationReference,
-                    supplierId = q.SupplierId,
-                    supplierName = q.Supplier?.Name ?? "",
-                    unitRate = item.UnitRate,
-                    discount = item.Discount,
-                    taxRate = item.TaxRate,
-                    estimatedFreight = item.EstimatedFreight,
-                    lineTotal = item.LineTotal,
-                    validUntil = q.ValidUntil.ToString("yyyy-MM-dd")
-                });
+                var qty = item.QuotedQuantity;
+                var taxable = Math.Max(0m, qty * item.UnitRate - item.Discount);
+                // Always recompute for fair cross-supplier comparison (legacy LineTotal omitted tax).
+                var lineTotal = Money.Round2(taxable + Money.Round2(taxable * item.TaxRate / 100m) + item.EstimatedFreight);
+                var effectiveUnitCost = qty > 0 ? Money.Round4(lineTotal / qty) : Money.Round4(item.UnitRate);
+
+                group.Quotes.Add((
+                    q.Id,
+                    q.QuotationReference,
+                    q.SupplierId,
+                    q.Supplier?.Name ?? "",
+                    q.ValidUntil.ToString("yyyy-MM-dd"),
+                    qty,
+                    item.UnitRate,
+                    item.Discount,
+                    item.TaxRate,
+                    item.EstimatedFreight,
+                    lineTotal,
+                    effectiveUnitCost
+                ));
             }
         }
 
-        return ApiResponse.Ok(materialMap.Values.ToList());
+        var comparison = groups.Values
+            .Where(g => g.Quotes.Count > 0)
+            .Select(g =>
+            {
+                var ordered = g.Quotes.OrderBy(x => x.EffectiveUnitCost).ToList();
+                var best = ordered[0];
+                return new
+                {
+                    materialId = g.MaterialId,
+                    materialCode = g.MaterialCode,
+                    materialName = g.MaterialName,
+                    unitCode = g.UnitCode,
+                    lowestRateSupplier = string.IsNullOrWhiteSpace(best.SupplierName) ? "N/A" : best.SupplierName,
+                    lowestEffectiveRate = best.EffectiveUnitCost,
+                    quotes = ordered.Select(x => new
+                    {
+                        quotationId = x.QuotationId,
+                        quotationReference = x.QuotationReference,
+                        supplierId = x.SupplierId,
+                        supplierName = x.SupplierName,
+                        validUntil = x.ValidUntil,
+                        quotedQuantity = x.QuotedQuantity,
+                        unitRate = x.UnitRate,
+                        discount = x.Discount,
+                        taxRate = x.TaxRate,
+                        estimatedFreight = x.EstimatedFreight,
+                        lineTotal = x.LineTotal,
+                        effectiveUnitCost = x.EffectiveUnitCost
+                    }).ToList()
+                };
+            })
+            .OrderBy(x => x.materialCode)
+            .ToList();
+
+        return ApiResponse.Ok(comparison);
     }
 
     private static void RecalcPoTotals(PurchaseOrder po)
@@ -441,8 +514,8 @@ public partial class InventoryApp
                 lineTotal = l.LineTotal,
                 notes = l.Notes
             }).ToList(),
+            // Single property only — System.Text.Json is case-insensitive and rejects subtotal + subTotal.
             subtotal = p.Subtotal,
-            subTotal = p.Subtotal,
             orderedQuantity = ordered,
             receivedQuantity = received,
             outstandingQuantity = Math.Max(0, ordered - received),

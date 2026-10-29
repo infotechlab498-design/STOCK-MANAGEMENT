@@ -24,7 +24,7 @@ import { Badge } from '../components/common/Badge';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { StatCard } from '../components/common/StatCard';
 import { LoadingSpinner, EmptyState } from '../components/common/EmptyState';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import {
   grnService,
   GoodsReceivedNoteDto,

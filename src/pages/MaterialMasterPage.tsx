@@ -28,7 +28,7 @@ import { Badge } from '../components/common/Badge';
 import { DataTable, ColumnDef } from '../components/common/DataTable';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/common/EmptyState';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { useNavigate } from 'react-router-dom';
 import {
   materialService,
@@ -93,7 +93,8 @@ export const MaterialMasterPage: React.FC = () => {
   const [editError, setEditError] = useState<string | null>(null);
 
   // Check authorization roles
-  const canManageMaterials = hasRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']);
+  // Procurement: view-only master data; write reserved for SA / Inventory Manager
+  const canManageMaterials = hasRole(['SuperAdmin', 'InventoryManager']);
   const canToggleStatus = hasRole(['SuperAdmin', 'InventoryManager']);
 
   // Fetch Master Data

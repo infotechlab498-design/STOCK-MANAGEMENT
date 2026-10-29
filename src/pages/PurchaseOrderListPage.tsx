@@ -18,7 +18,7 @@ import {
   DollarSign,
   FileSpreadsheet,
 } from 'lucide-react';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { AppLayout } from '../layouts/AppLayout';
 import { Card } from '../components/common/Card';
 import { StatCard } from '../components/common/StatCard';
@@ -64,8 +64,8 @@ export const PurchaseOrderListPage: React.FC = () => {
   const [isIssuing, setIsIssuing] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const canCreatePO = hasRole(['SuperAdmin', 'InventoryManager', 'ProcurementOfficer']);
-  const isApprover = hasRole(['SuperAdmin', 'InventoryManager', 'ProjectManager']);
+  const canCreatePO = hasRole(['SuperAdmin', 'ProcurementOfficer']);
+  const isApprover = hasRole(['SuperAdmin', 'ProjectManager']);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);

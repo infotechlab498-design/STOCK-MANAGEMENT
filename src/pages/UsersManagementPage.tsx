@@ -21,7 +21,7 @@ import { Card } from '../components/common/Card';
 import { StatCard } from '../components/common/StatCard';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { useNavigation } from '../app/NavigationContext';
 import { useNavigate } from 'react-router-dom';
 import { authService, UserProfile, RoleInfo, CreateUserPayload, UpdateUserPayload } from '../services/api/authService';

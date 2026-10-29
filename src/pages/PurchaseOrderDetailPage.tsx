@@ -23,7 +23,7 @@ import {
   FileText,
   Info,
 } from 'lucide-react';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { AppLayout } from '../layouts/AppLayout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -109,23 +109,23 @@ export const PurchaseOrderDetailPage: React.FC = () => {
   // Authorization Permissions
   const isSuperAdmin = hasRole(['SuperAdmin']);
   const isProcurementOfficer = hasRole(['ProcurementOfficer']);
-  const isInventoryManager = hasRole(['InventoryManager']);
   const isProjectManager = hasRole(['ProjectManager']);
 
-  const canEdit = po.status === 'Draft' && (isSuperAdmin || isProcurementOfficer || isInventoryManager);
-  const canSubmit = po.status === 'Draft' && (isSuperAdmin || isProcurementOfficer || isInventoryManager);
+  // SoD: inventory roles do not create/edit/issue POs — procurement (or SA) only
+  const canEdit = po.status === 'Draft' && (isSuperAdmin || isProcurementOfficer);
+  const canSubmit = po.status === 'Draft' && (isSuperAdmin || isProcurementOfficer);
 
-  // Self-approval check: User cannot approve their own PO unless SuperAdmin
+  // Self-approval: creator cannot approve; SuperAdmin may still be blocked by API if SelfApprovalAllowed=false
   const isCreator = po.createdByUserId === user?.id;
-  const isEligibleApprover = isSuperAdmin || isInventoryManager || isProjectManager;
-  const canApprove = po.status === 'PendingApproval' && isEligibleApprover && (!isCreator || isSuperAdmin);
-  const isSelfApprovalBlocked = po.status === 'PendingApproval' && isEligibleApprover && isCreator && !isSuperAdmin;
+  const isEligibleApprover = isSuperAdmin || isProjectManager;
+  const canApprove = po.status === 'PendingApproval' && isEligibleApprover && !isCreator;
+  const isSelfApprovalBlocked = po.status === 'PendingApproval' && isEligibleApprover && isCreator;
 
   const canReject = po.status === 'PendingApproval' && isEligibleApprover;
-  const canIssue = po.status === 'Approved' && (isSuperAdmin || isProcurementOfficer || isInventoryManager);
+  const canIssue = po.status === 'Approved' && (isSuperAdmin || isProcurementOfficer);
   const canCancel =
     ['Draft', 'PendingApproval', 'Approved', 'Issued'].includes(po.status) &&
-    (isSuperAdmin || isProcurementOfficer || isInventoryManager);
+    (isSuperAdmin || isProcurementOfficer);
 
   // Action Handlers
   const handleAction = async (actionFn: () => Promise<any>, successMsg: string) => {

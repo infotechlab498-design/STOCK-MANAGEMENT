@@ -15,7 +15,7 @@ import {
   Trash2,
   Calendar,
 } from 'lucide-react';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 import { AppLayout } from '../layouts/AppLayout';
 import { Card } from '../components/common/Card';
 import { StatCard } from '../components/common/StatCard';

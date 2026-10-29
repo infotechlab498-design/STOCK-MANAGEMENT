@@ -302,7 +302,12 @@ export const purchaseOrderService = {
   },
 
   async getRateComparison(): Promise<RateComparisonItemDto[]> {
-    const res = await apiClient.get<RateComparisonItemDto[]>('/quotations/compare');
-    return res.data;
+    const res = await apiClient.get<RateComparisonItemDto[] | { items?: RateComparisonItemDto[] }>(
+      '/quotations/compare'
+    );
+    const payload = res.data as RateComparisonItemDto[] | { items?: RateComparisonItemDto[] } | null;
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.items)) return payload.items;
+    return [];
   },
 };

@@ -16,9 +16,20 @@ export interface UserProfile {
 }
 
 export interface LoginResponseData {
-  accessToken: string;
-  expiresInSeconds: number;
+  /** Preferred JWT field returned by StructStock.Api */
+  accessToken?: string;
+  /** Legacy/compat alias (same JWT as accessToken) */
+  token?: string;
+  expiresInSeconds?: number;
+  expiresAtUtc?: string;
   user: UserProfile;
+}
+
+/** Normalize login payload whether API returns accessToken or token. */
+export function resolveAccessToken(data: LoginResponseData | null | undefined): string | null {
+  if (!data) return null;
+  const raw = (data.accessToken || data.token || '').trim();
+  return raw || null;
 }
 
 export interface RoleInfo {

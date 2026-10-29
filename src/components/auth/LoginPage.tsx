@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HardHat, Lock, User, Eye, EyeOff, ShieldCheck, AlertCircle, ArrowRight } from 'lucide-react';
-import { useAuth } from '../../app/AuthContext';
+import { useAuth } from '../../app/useAuth';
 import { Button } from '../common/Button';
 
 export const LoginPage: React.FC = () => {
@@ -266,6 +266,26 @@ export const LoginPage: React.FC = () => {
               >
                 <span className="badge-dot" style={{ backgroundColor: '#D69E2E' }} />
                 Storekeeper
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleQuickFill('procurement@constructcorp.com', 'Procure@2026!Officer')}
+                title="Procurement Officer: PO creation & supplier rates"
+                style={{ justifyContent: 'flex-start', fontSize: '0.6875rem' }}
+              >
+                <span className="badge-dot" style={{ backgroundColor: '#805AD5' }} />
+                Procurement
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleQuickFill('accounts@constructcorp.com', 'Accounts@2026!Valuation')}
+                title="Accounts Officer: Valuation & ledger review"
+                style={{ justifyContent: 'flex-start', fontSize: '0.6875rem' }}
+              >
+                <span className="badge-dot" style={{ backgroundColor: '#2B6CB0' }} />
+                Accounts
               </button>
             </div>
             <div style={{ marginTop: 'var(--space-2)' }}>

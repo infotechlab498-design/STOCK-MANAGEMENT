@@ -27,8 +27,10 @@ public class WorkflowSmokeTests : IClassFixture<WebApplicationFactory<Program>>
 
         Assert.True(login.IsSuccessStatusCode, await login.Content.ReadAsStringAsync());
         using var loginDoc = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
-        var token = loginDoc.RootElement.GetProperty("data").GetProperty("token").GetString();
+        var data = loginDoc.RootElement.GetProperty("data");
+        var token = data.TryGetProperty("accessToken", out var at) ? at.GetString() : data.GetProperty("token").GetString();
         Assert.False(string.IsNullOrWhiteSpace(token));
+        Assert.True(data.TryGetProperty("accessToken", out _), "Login must return accessToken for the React client");
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         var materials = await client.GetAsync("/api/v1/materials");

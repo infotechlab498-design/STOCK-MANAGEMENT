@@ -14,9 +14,13 @@ public static class ApiRoutes
             var body = await ReadBody(req);
             var login = await app.LoginAsync(Str(body, "usernameOrEmail"), Str(body, "password"), req.HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
             var (token, expires) = jwt.Create(login.User);
+            var expiresInSeconds = Math.Max(1, (int)Math.Ceiling((expires - DateTime.UtcNow).TotalSeconds));
+            // React client expects accessToken + expiresInSeconds; keep token for tests/compat.
             return Results.Ok(ApiResponse.Ok(new
             {
+                accessToken = token,
                 token,
+                expiresInSeconds,
                 expiresAtUtc = expires.ToString("o"),
                 user = login.Profile
             }));
@@ -265,8 +269,8 @@ public static class ApiRoutes
         api.MapPost("/grns/{id}/post", async (string id, InventoryApp app, CancellationToken ct) => Results.Ok(await app.PostGrnAsync(id, ct))).RequireAuthorization();
         api.MapPost("/api/grns/{id}/post", async (string id, InventoryApp app, CancellationToken ct) => Results.Ok(await app.PostGrnAsync(id, ct))).RequireAuthorization();
 
-        api.MapGet("/inventory/balances", async (string? search, string? projectId, string? warehouseId, string? materialId, int? page, int? pageSize, InventoryApp app, CancellationToken ct) =>
-            Results.Ok(await app.ListBalancesAsync(search, projectId, warehouseId, materialId, page, pageSize, ct))).RequireAuthorization();
+        api.MapGet("/inventory/balances", async (string? search, string? projectId, string? warehouseId, string? materialId, string? status, int? page, int? pageSize, InventoryApp app, CancellationToken ct) =>
+            Results.Ok(await app.ListBalancesAsync(search, projectId, warehouseId, materialId, status, page, pageSize, ct))).RequireAuthorization();
         api.MapGet("/inventory/balances/{materialId}", async (string materialId, InventoryApp app, CancellationToken ct) =>
             Results.Ok(await app.GetBalancesForMaterialAsync(materialId, ct))).RequireAuthorization();
         api.MapGet("/inventory/ledger", async (string? search, string? projectId, string? warehouseId, string? materialId, string? transactionType, int? page, int? pageSize, InventoryApp app, CancellationToken ct) =>
@@ -373,7 +377,8 @@ public static class ApiRoutes
         api.MapGet("/notifications/unread-count", async (InventoryApp app, CancellationToken ct) => Results.Ok(await app.UnreadNotificationCountAsync(ct))).RequireAuthorization();
         api.MapPost("/notifications/{id}/read", async (string id, InventoryApp app, CancellationToken ct) => Results.Ok(await app.MarkNotificationReadAsync(id, ct))).RequireAuthorization();
         api.MapPost("/notifications/read-all", async (InventoryApp app, CancellationToken ct) => Results.Ok(await app.MarkAllNotificationsReadAsync(ct))).RequireAuthorization();
-        api.MapGet("/dashboard/summary", async (InventoryApp app, CancellationToken ct) => Results.Ok(await app.DashboardSummaryAsync(ct))).RequireAuthorization();
+        api.MapGet("/dashboard/summary", async (string? projectId, string? warehouseId, string? fromDate, string? toDate, InventoryApp app, CancellationToken ct) =>
+            Results.Ok(await app.DashboardSummaryAsync(projectId, warehouseId, fromDate, toDate, ct))).RequireAuthorization();
         api.MapGet("/reports/{reportType}", async (string reportType, HttpRequest req, InventoryApp app, CancellationToken ct) =>
         {
             var filters = req.Query.ToDictionary(k => k.Key, v => (string?)v.Value.ToString());

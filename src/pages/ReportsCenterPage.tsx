@@ -27,7 +27,7 @@ import {
   ScopedReportResponse,
 } from '../services/api/dashboardReportService';
 import { ApiClientException } from '../services/api/apiClient';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 
 interface ReportTabItem {
   key: ReportTypeKey;

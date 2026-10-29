@@ -23,13 +23,11 @@ public partial class InventoryApp
             throw new AppException(429, $"Too many failed login attempts. Please wait {wait} seconds.");
         }
 
-        var user = await _db.Users
-            .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
-            .Include(u => u.ProjectScopes)
-            .Include(u => u.WarehouseScopes)
-            .FirstOrDefaultAsync(u => u.NormalizedEmail == identifier || u.NormalizedUsername == identifier, ct);
+        // Identity UserManager + custom stores over dbo.AppUser (existing PBKDF2 hashes).
+        var user = await _userManager.FindByNameAsync(identifier)
+                   ?? await _userManager.FindByEmailAsync(identifier);
 
-        if (user == null || !PasswordHasher.Verify(password, user.PasswordHash))
+        if (user == null || !await _userManager.CheckPasswordAsync(user, password))
         {
             tracker ??= new LoginAttempt { TrackerKey = trackerKey };
             if (_db.Entry(tracker).State == EntityState.Detached)
@@ -51,6 +49,13 @@ public partial class InventoryApp
         {
             throw new AppException(403, "This account has been disabled");
         }
+
+        // Reload navigations for JWT claims / profile mapping.
+        user = await _db.Users
+            .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+            .Include(u => u.ProjectScopes)
+            .Include(u => u.WarehouseScopes)
+            .FirstAsync(u => u.Id == user.Id, ct);
 
         if (tracker != null)
         {
@@ -84,7 +89,7 @@ public partial class InventoryApp
 
     public async Task<object> ListUsersAsync(string? search, string? role, string? status, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager");
+        _me.RequireRole("SuperAdmin");
         var query = _db.Users
             .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
             .Include(u => u.ProjectScopes)
@@ -114,7 +119,7 @@ public partial class InventoryApp
 
     public async Task<object> GetUserAsync(string id, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager");
+        _me.RequireRole("SuperAdmin");
         var user = await LoadUser(id, ct) ?? throw new AppException(404, "User not found");
         return ApiResponse.Ok(MapUser(user));
     }
@@ -154,10 +159,10 @@ public partial class InventoryApp
             Email = req.Email.Trim(),
             NormalizedEmail = normEmail,
             FullName = req.FullName.Trim(),
-            PasswordHash = PasswordHasher.Hash(req.Password),
             IsActive = true,
             CreatedAtUtc = DateTime.UtcNow
         };
+        user.PasswordHash = _userManager.PasswordHasher.HashPassword(user, req.Password);
         foreach (var role in roles)
         {
             user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id, Role = role });
@@ -197,7 +202,7 @@ public partial class InventoryApp
 
         if (!string.IsNullOrWhiteSpace(req.Password))
         {
-            user.PasswordHash = PasswordHasher.Hash(req.Password);
+            user.PasswordHash = _userManager.PasswordHasher.HashPassword(user, req.Password);
         }
 
         if (req.Roles != null)

@@ -11,17 +11,27 @@ import {
   PieChart,
   Layers,
 } from 'lucide-react';
-import { PageHeader } from '../components/common/PageHeader';
 import { StatCard } from '../components/common/StatCard';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { LoadingSpinner, EmptyState } from '../components/common/EmptyState';
+import { AppLayout } from '../layouts/AppLayout';
 import {
   inventoryService,
   InventoryValuationData,
 } from '../services/api/inventoryService';
+import { useNavigate } from 'react-router-dom';
+
+const EMPTY_SUMMARY: InventoryValuationData['summary'] = {
+  totalInventoryValue: 0,
+  totalQuantityOnHand: 0,
+  distinctMaterials: 0,
+  activeLocations: 0,
+  asOfTimestampUtc: '',
+};
 
 export const InventoryValuationPage: React.FC = () => {
+  const navigate = useNavigate();
   const [valuationData, setValuationData] = useState<InventoryValuationData | null>(null);
   const [activeTab, setActiveTab] = useState<'material' | 'warehouse' | 'project'>('material');
 
@@ -41,12 +51,31 @@ export const InventoryValuationPage: React.FC = () => {
       });
 
       if (res.success && res.data) {
-        setValuationData(res.data);
+        const raw = res.data as InventoryValuationData & {
+          totalInventoryValue?: number;
+          totalQuantityOnHand?: number;
+        };
+        setValuationData({
+          byMaterial: raw.byMaterial || [],
+          byWarehouse: raw.byWarehouse || [],
+          byProject: raw.byProject || [],
+          summary: {
+            totalInventoryValue:
+              raw.summary?.totalInventoryValue ?? raw.totalInventoryValue ?? 0,
+            totalQuantityOnHand:
+              raw.summary?.totalQuantityOnHand ?? raw.totalQuantityOnHand ?? 0,
+            distinctMaterials: raw.summary?.distinctMaterials ?? raw.byMaterial?.length ?? 0,
+            activeLocations: raw.summary?.activeLocations ?? raw.byWarehouse?.length ?? 0,
+            asOfTimestampUtc: raw.summary?.asOfTimestampUtc || new Date().toISOString(),
+          },
+        });
       } else {
         setError(res.message || 'Failed to load inventory valuation.');
+        setValuationData(null);
       }
     } catch (err: any) {
       setError(err.message || 'Error connecting to server.');
+      setValuationData(null);
     } finally {
       setIsLoading(false);
     }
@@ -89,34 +118,40 @@ export const InventoryValuationPage: React.FC = () => {
     }
   };
 
-  return (
-    <div className="content-container">
-      <PageHeader
-        title="Inventory Valuation (Moving WAC)"
-        description="Financial inventory balance valued strictly using continuous moving weighted-average costing per SOP SCM-F-01"
-        actions={
-          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<RefreshCw size={15} />}
-              onClick={fetchValuation}
-              isLoading={isLoading}
-            >
-              Refresh
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<FileSpreadsheet size={15} />}
-              onClick={() => window.print()}
-            >
-              Export Report
-            </Button>
-          </div>
-        }
-      />
+  const summary = valuationData?.summary ?? EMPTY_SUMMARY;
+  const totalValue = summary.totalInventoryValue || 0;
 
+  return (
+    <AppLayout
+      breadcrumbs={[
+        { label: 'Dashboard', onClick: () => navigate('/dashboard') },
+        { label: 'Reports', onClick: () => navigate('/reports') },
+        { label: 'Inventory Valuation', active: true },
+      ]}
+      title="Inventory Valuation (Moving WAC)"
+      description="Financial inventory balance valued strictly using continuous moving weighted-average costing per SOP SCM-F-01"
+      actions={
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<RefreshCw size={15} />}
+            onClick={fetchValuation}
+            isLoading={isLoading}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<FileSpreadsheet size={15} />}
+            onClick={() => window.print()}
+          >
+            Export Report
+          </Button>
+        </div>
+      }
+    >
       {/* Valuation Summary KPIs */}
       <div
         style={{
@@ -128,31 +163,31 @@ export const InventoryValuationPage: React.FC = () => {
       >
         <StatCard
           label="Total Inventory Valuation"
-          value={formatCurrency(valuationData?.summary.totalInventoryValue || 0)}
+          value={formatCurrency(totalValue)}
           icon={<DollarSign size={20} />}
           accent="orange"
           meta="Perpetual Moving WAC Rollup"
         />
         <StatCard
           label="Total On-Hand Quantity"
-          value={(valuationData?.summary.totalQuantityOnHand || 0).toLocaleString('en-US')}
+          value={(summary.totalQuantityOnHand || 0).toLocaleString('en-US')}
           icon={<Boxes size={20} />}
           accent="charcoal"
-          meta={`${valuationData?.summary.distinctMaterials || 0} Stocked Material Masters`}
+          meta={`${summary.distinctMaterials || 0} Stocked Material Masters`}
         />
         <StatCard
           label="Active Locations"
-          value={valuationData?.summary.activeLocations || 0}
+          value={summary.activeLocations || 0}
           icon={<Warehouse size={20} />}
           accent="charcoal"
           meta="Distinct Warehouse & Site Yards"
         />
         <StatCard
           label="Valuation As-Of Timestamp"
-          value={valuationData?.summary.asOfTimestampUtc ? 'Current UTC' : 'N/A'}
+          value={summary.asOfTimestampUtc ? 'Current UTC' : 'N/A'}
           icon={<Clock size={20} />}
           accent="success"
-          meta={formatDate(valuationData?.summary.asOfTimestampUtc)}
+          meta={formatDate(summary.asOfTimestampUtc)}
         />
       </div>
 
@@ -381,10 +416,10 @@ export const InventoryValuationPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {valuationData?.byWarehouse.map((w) => {
+                {(valuationData?.byWarehouse || []).map((w) => {
                   const pct =
-                    valuationData.summary.totalInventoryValue > 0
-                      ? ((w.totalValue / valuationData.summary.totalInventoryValue) * 100).toFixed(1)
+                    totalValue > 0
+                      ? ((w.totalValue / totalValue) * 100).toFixed(1)
                       : '0.0';
                   return (
                     <tr key={w.locationId}>
@@ -432,10 +467,10 @@ export const InventoryValuationPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {valuationData?.byProject.map((p) => {
+                {(valuationData?.byProject || []).map((p) => {
                   const pct =
-                    valuationData.summary.totalInventoryValue > 0
-                      ? ((p.totalValue / valuationData.summary.totalInventoryValue) * 100).toFixed(1)
+                    totalValue > 0
+                      ? ((p.totalValue / totalValue) * 100).toFixed(1)
                       : '0.0';
                   return (
                     <tr key={p.locationId}>
@@ -470,6 +505,6 @@ export const InventoryValuationPage: React.FC = () => {
           </div>
         </Card>
       )}
-    </div>
+    </AppLayout>
   );
 };

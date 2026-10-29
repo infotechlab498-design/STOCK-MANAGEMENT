@@ -202,7 +202,7 @@ public partial class InventoryApp
 
     public async Task<object> CreateMaterialAsync(CreateMaterialRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "InventoryManager");
         if (string.IsNullOrWhiteSpace(req.ItemCode)) throw new AppException(400, "ItemCode is required");
         if (string.IsNullOrWhiteSpace(req.Name)) throw new AppException(400, "Material Name is required");
         var code = req.ItemCode.Trim().ToUpperInvariant();
@@ -247,7 +247,7 @@ public partial class InventoryApp
 
     public async Task<object> UpdateMaterialAsync(string id, UpdateMaterialRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "InventoryManager");
         var material = await _db.Materials.Include(m => m.Category).Include(m => m.BaseUnit)
             .FirstOrDefaultAsync(m => m.Id == id, ct) ?? throw new AppException(404, $"Material with ID '{id}' was not found");
         if (string.IsNullOrWhiteSpace(req.Name)) throw new AppException(400, "Material Name is required");
@@ -503,7 +503,7 @@ public partial class InventoryApp
 
     public async Task<object> CreateSupplierAsync(CreateSupplierRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "ProcurementOfficer");
         if (string.IsNullOrWhiteSpace(req.SupplierCode) || string.IsNullOrWhiteSpace(req.Name))
         {
             throw new AppException(400, "Supplier code and name are required");
@@ -539,7 +539,7 @@ public partial class InventoryApp
 
     public async Task<object> UpdateSupplierAsync(string id, CreateSupplierRequest req, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "ProcurementOfficer");
         var supplier = await _db.Suppliers.FirstOrDefaultAsync(s => s.Id == id, ct)
             ?? throw new AppException(404, "Supplier not found");
         if (!string.IsNullOrWhiteSpace(req.Name)) supplier.Name = req.Name.Trim();
@@ -558,7 +558,7 @@ public partial class InventoryApp
 
     public async Task<object> PatchSupplierStatusAsync(string id, bool isActive, CancellationToken ct)
     {
-        _me.RequireRole("SuperAdmin", "InventoryManager", "ProcurementOfficer");
+        _me.RequireRole("SuperAdmin", "ProcurementOfficer");
         var supplier = await _db.Suppliers.FirstOrDefaultAsync(s => s.Id == id, ct)
             ?? throw new AppException(404, "Supplier not found");
         supplier.IsActive = isActive;

@@ -2,6 +2,10 @@ using System.Security.Cryptography;
 
 namespace StructStock.Infrastructure;
 
+/// <summary>
+/// StructStock PBKDF2 format (salt:hash). Used by CompatPasswordHasher for Identity.
+/// Prefer UserManager / IPasswordHasher&lt;AppUser&gt; from application code.
+/// </summary>
 public static class PasswordHasher
 {
     public static string Hash(string password)

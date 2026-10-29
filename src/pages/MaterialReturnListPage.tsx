@@ -19,7 +19,7 @@ import {
   materialReturnService,
   MaterialReturn,
 } from '../services/api/materialReturnService';
-import { useAuth } from '../app/AuthContext';
+import { useAuth } from '../app/useAuth';
 
 export const MaterialReturnListPage: React.FC = () => {
   const navigate = useNavigate();
